@@ -36,6 +36,12 @@ class AppState: ObservableObject {
     @Published var isSignedUp: Bool = false
     @Published var isCheckingAuth: Bool = false  // 자동 로그인 체크 중
     @Published var currentUser: User?  // 현재 로그인한 사용자 정보
+    @Published var selectedTab: BottomNavView.Tab = .home  // 현재 선택된 탭
+    
+    /// 탭을 전환합니다
+    func switchToTab(_ tab: BottomNavView.Tab) {
+        selectedTab = tab
+    }
     
     private let authService = AuthService.shared
     private let tokenManager = TokenManager.shared

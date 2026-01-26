@@ -8,12 +8,12 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab: BottomNavView.Tab = .home
+    @EnvironmentObject var appState: AppState
     
     var body: some View {
         ZStack(alignment: .bottom) {
             Group {
-                switch selectedTab {
+                switch appState.selectedTab {
                 case .run:
                     RunView()
                 case .report:
@@ -38,7 +38,7 @@ struct MainTabView: View {
             VStack {
                 Spacer()
                 
-                BottomNavView(selectedTab: $selectedTab)
+                BottomNavView(selectedTab: $appState.selectedTab)
             }
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
