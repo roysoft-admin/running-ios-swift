@@ -10,35 +10,27 @@ import SwiftUI
 struct RunView: View {
     @StateObject private var viewModel = RunViewModel()
     @State private var showStartModal = false
+    @State private var showFullScreenMap = false
     
     var body: some View {
-        ZStack {
-            Color.gray50.ignoresSafeArea()
-            
+        ScrollView {
             VStack(spacing: 0) {
                 // Map Area
                 ZStack {
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.emerald100, Color.blue50]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    
-                    VStack(spacing: 16) {
-                        Image(systemName: "map")
-                            .font(.system(size: 96))
-                            .foregroundColor(.gray400.opacity(0.5))
-                        
-                        Text("Map View")
-                            .font(.system(size: 14))
-                            .foregroundColor(.gray400)
-                    }
+                    // 실제 맵 표시
+                    ActivityMapView(routes: [], isInteractive: false)
+                        .frame(height: 300)
+                        .clipped()
                     
                     VStack {
                         HStack {
                             Spacer()
                             
-                            Button(action: {}) {
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showFullScreenMap = true
+                                }
+                            }) {
                                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                                     .font(.system(size: 20))
                                     .foregroundColor(.gray700)
@@ -53,6 +45,7 @@ struct RunView: View {
                         Spacer()
                     }
                 }
+                .frame(height: 300) // Map 영역 높이 고정
                 
                 // Stats Area
                 VStack(spacing: 24) {
@@ -94,10 +87,16 @@ struct RunView: View {
                 }
                 .padding(24)
                 .background(Color.white)
+                .padding(.bottom, 80) // 하단 바 공간 확보
             }
         }
+        .background(Color.gray50)
         .sheet(isPresented: $showStartModal) {
             RunModeSelectionView(viewModel: viewModel)
+        }
+        .fullScreenCover(isPresented: $showFullScreenMap) {
+            FullScreenMapView()
+                .transition(.opacity)
         }
         .loadingOverlay(isLoading: $viewModel.isLoading)
         .errorAlert(errorMessage: $viewModel.errorMessage)
@@ -216,6 +215,43 @@ struct RunModeSelectionView: View {
         }
         .fullScreenCover(isPresented: $navigateToProgress) {
             RunningInProgressView(viewModel: viewModel)
+        }
+    }
+}
+
+struct FullScreenMapView: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var isPresented = false
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // 동일한 맵을 전체 화면으로 표시 (기존 맵이 확대되는 느낌)
+                ActivityMapView(routes: [], isInteractive: true)
+                    .ignoresSafeArea()
+                    .opacity(isPresented ? 1 : 0)
+                    .scaleEffect(isPresented ? 1 : 0.95)
+                    .animation(.easeInOut(duration: 0.3), value: isPresented)
+            }
+            .navigationTitle("지도")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("닫기") {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isPresented = false
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isPresented = true
+                }
+            }
         }
     }
 }
