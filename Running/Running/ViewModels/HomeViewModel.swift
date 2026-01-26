@@ -137,14 +137,20 @@ class HomeViewModel: ObservableObject {
             },
             receiveValue: { [weak self] response in
                 guard let self = self else { return }
-                let activities = response.activities
-                let totalDistance = activities.reduce(0) { $0 + $1.distance }
-                let totalTime = activities.reduce(0) { $0 + $1.time }
-                let totalCalories = activities.reduce(0) { $0 + ($1.calories ?? 0) }
+                let allActivities = response.activities
+                
+                // 완료된 활동만 필터링 (distance > 0이고 endTime이 startTime보다 큰 활동)
+                let completedActivities = allActivities.filter { activity in
+                    activity.distance > 0 && activity.endTime > activity.startTime
+                }
+                
+                let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
+                let totalTime = completedActivities.reduce(0) { $0 + $1.time }
+                let totalCalories = completedActivities.reduce(0) { $0 + ($1.calories ?? 0) }
                 
                 // Activity의 pointId로 포인트 금액 계산
                 // pointId는 Int이지만, Point를 찾을 때는 id로 찾고 uuid는 API 호출 시 사용
-                let totalPoints = activities.reduce(0) { sum, activity in
+                let totalPoints = completedActivities.reduce(0) { sum, activity in
                     if let pointId = activity.pointId,
                        let point = self.points.first(where: { $0.id == pointId }) {
                         return sum + point.point
@@ -184,8 +190,14 @@ class HomeViewModel: ObservableObject {
                 }
             },
             receiveValue: { [weak self] response in
-                let activities = response.activities
-                let totalDistance = activities.reduce(0) { $0 + $1.distance }
+                let allActivities = response.activities
+                
+                // 완료된 활동만 필터링 (distance > 0이고 endTime이 startTime보다 큰 활동)
+                let completedActivities = allActivities.filter { activity in
+                    activity.distance > 0 && activity.endTime > activity.startTime
+                }
+                
+                let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
                 
                 // Group by day
                 let dayNames = ["일", "월", "화", "수", "목", "금", "토"]
@@ -193,7 +205,7 @@ class HomeViewModel: ObservableObject {
                 
                 for i in 0..<7 {
                     let date = calendar.date(byAdding: .day, value: i, to: startOfWeek)!
-                    let dayActivities = activities.filter { activity in
+                    let dayActivities = completedActivities.filter { activity in
                         calendar.isDate(activity.startTime, inSameDayAs: date)
                     }
                     let dayDistance = dayActivities.reduce(0) { $0 + $1.distance }
@@ -206,7 +218,7 @@ class HomeViewModel: ObservableObject {
                 
                 self?.weeklyStats = WeeklyStats(
                     totalDistance: totalDistance,
-                    runningCount: activities.count,
+                    runningCount: completedActivities.count,
                     dailyData: dailyData
                 )
             }
@@ -236,12 +248,18 @@ class HomeViewModel: ObservableObject {
             },
             receiveValue: { [weak self] response in
                 guard let self = self else { return }
-                let activities = response.activities
-                let totalDistance = activities.reduce(0) { $0 + $1.distance }
+                let allActivities = response.activities
+                
+                // 완료된 활동만 필터링 (distance > 0이고 endTime이 startTime보다 큰 활동)
+                let completedActivities = allActivities.filter { activity in
+                    activity.distance > 0 && activity.endTime > activity.startTime
+                }
+                
+                let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
                 
                 // Activity의 pointId로 포인트 금액 계산
                 // pointId는 Int이지만, Point를 찾을 때는 id로 찾고 uuid는 API 호출 시 사용
-                let totalPoints = activities.reduce(0) { sum, activity in
+                let totalPoints = completedActivities.reduce(0) { sum, activity in
                     if let pointId = activity.pointId,
                        let point = self.points.first(where: { $0.id == pointId }) {
                         return sum + point.point
@@ -256,7 +274,7 @@ class HomeViewModel: ObservableObject {
                 
                 while currentWeekStart <= endOfMonth {
                     let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: currentWeekStart)!, endOfMonth)
-                    let weekActivities = activities.filter { activity in
+                    let weekActivities = completedActivities.filter { activity in
                         activity.startTime >= currentWeekStart && activity.startTime <= weekEnd
                     }
                     let weekDistance = weekActivities.reduce(0) { $0 + $1.distance }
@@ -272,7 +290,7 @@ class HomeViewModel: ObservableObject {
                 
                 self.monthlyStats = MonthlyStats(
                     totalDistance: totalDistance,
-                    runningCount: activities.count,
+                    runningCount: completedActivities.count,
                     earnedPoints: totalPoints,
                     weeklyData: weeklyData
                 )
