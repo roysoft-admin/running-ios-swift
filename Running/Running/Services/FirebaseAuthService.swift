@@ -103,13 +103,17 @@ class FirebaseAuthService {
                 if let error = error {
                     print("[FirebaseAuthService] ❌ Google Sign-In 에러: \(error.localizedDescription)")
                     print("[FirebaseAuthService] ❌ 에러 상세: \(error)")
-                    promise(.failure(error))
+                    DispatchQueue.main.async {
+                        promise(.failure(error))
+                    }
                     return
                 }
                 
                 guard let user = result?.user else {
                     print("[FirebaseAuthService] ❌ Google 로그인 사용자 정보를 가져올 수 없습니다.")
-                    promise(.failure(NSError(domain: "FirebaseAuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Google 로그인 사용자 정보를 가져올 수 없습니다."])))
+                    DispatchQueue.main.async {
+                        promise(.failure(NSError(domain: "FirebaseAuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Google 로그인 사용자 정보를 가져올 수 없습니다."])))
+                    }
                     return
                 }
                 
@@ -118,7 +122,9 @@ class FirebaseAuthService {
                 // Google OAuth ID token 가져오기
                 guard let googleIDToken = user.idToken?.tokenString else {
                     print("[FirebaseAuthService] ❌ Google ID token을 가져올 수 없습니다.")
-                    promise(.failure(NSError(domain: "FirebaseAuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Google ID token을 가져올 수 없습니다."])))
+                    DispatchQueue.main.async {
+                        promise(.failure(NSError(domain: "FirebaseAuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Google ID token을 가져올 수 없습니다."])))
+                    }
                     return
                 }
                 
@@ -143,7 +149,9 @@ class FirebaseAuthService {
                 Auth.auth().signIn(with: credential) { authResult, error in
                     if let error = error {
                         print("[FirebaseAuthService] ❌ Firebase Auth 로그인 실패: \(error.localizedDescription)")
-                        promise(.failure(error))
+                        DispatchQueue.main.async {
+                            promise(.failure(error))
+                        }
                         return
                     }
                     
@@ -154,7 +162,9 @@ class FirebaseAuthService {
                         do {
                             guard let firebaseUser = Auth.auth().currentUser else {
                                 print("[FirebaseAuthService] ❌ Firebase 사용자 정보를 가져올 수 없습니다.")
-                                promise(.failure(NSError(domain: "FirebaseAuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Firebase 사용자 정보를 가져올 수 없습니다."])))
+                                DispatchQueue.main.async {
+                                    promise(.failure(NSError(domain: "FirebaseAuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Firebase 사용자 정보를 가져올 수 없습니다."])))
+                                }
                                 return
                             }
                             
@@ -167,10 +177,14 @@ class FirebaseAuthService {
                             )
                             
                             print("[FirebaseAuthService] ✅ Google 로그인 성공, Firebase ID token 반환")
-                            promise(.success(result))
+                            DispatchQueue.main.async {
+                                promise(.success(result))
+                            }
                         } catch {
                             print("[FirebaseAuthService] ❌ Firebase ID token 가져오기 실패: \(error.localizedDescription)")
-                            promise(.failure(error))
+                            DispatchQueue.main.async {
+                                promise(.failure(error))
+                            }
                         }
                     }
                 }
@@ -214,10 +228,14 @@ class FirebaseAuthService {
                         name: name
                     )
                     
-                    promise(.success(result))
+                    DispatchQueue.main.async {
+                        promise(.success(result))
+                    }
                     
                 case .failure(let error):
-                    promise(.failure(error))
+                    DispatchQueue.main.async {
+                        promise(.failure(error))
+                    }
                 }
             }
             

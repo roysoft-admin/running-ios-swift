@@ -29,6 +29,7 @@ class LoginViewModel: ObservableObject {
         errorMessage = nil
         
         firebaseAuthService.signInWithGoogle()
+            .receive(on: DispatchQueue.main)
             .mapError { error in
                 print("[LoginViewModel] ❌ Google Sign-In 에러: \(error.localizedDescription)")
                 return NetworkError.unknown
@@ -112,6 +113,7 @@ class LoginViewModel: ObservableObject {
         errorMessage = nil
         
         firebaseAuthService.signInWithApple()
+            .receive(on: DispatchQueue.main)
             .mapError { _ in NetworkError.unknown }
             .flatMap { [weak self] result -> AnyPublisher<SignInResponseDTO, NetworkError> in
                 guard let self = self else {
