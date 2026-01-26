@@ -201,9 +201,8 @@ struct RunningInProgressView: View {
             }
         }
         .onAppear {
-            if !viewModel.isRunning {
-                viewModel.startRunning(type: .normal)
-            }
+            // 이미 startRunning이 호출되었으므로 여기서는 호출하지 않음
+            // viewModel.startRunning은 RunModeSelectionView에서 이미 호출됨
         }
         .alert("러닝을 종료하시겠어요?", isPresented: $showEndDialog) {
             Button("계속하기", role: .cancel) {}

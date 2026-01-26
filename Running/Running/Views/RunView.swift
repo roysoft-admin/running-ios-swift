@@ -11,6 +11,8 @@ struct RunView: View {
     @StateObject private var viewModel = RunViewModel()
     @State private var showStartModal = false
     @State private var showFullScreenMap = false
+    @State private var navigateToProgress = false
+    @EnvironmentObject var appState: AppState
     
     var body: some View {
         ScrollView {
@@ -92,14 +94,23 @@ struct RunView: View {
         }
         .background(Color.gray50)
         .sheet(isPresented: $showStartModal) {
-            RunModeSelectionView(viewModel: viewModel)
+            RunModeSelectionView(viewModel: viewModel) {
+                navigateToProgress = true
+            }
         }
         .fullScreenCover(isPresented: $showFullScreenMap) {
             FullScreenMapView()
                 .transition(.opacity)
         }
+        .fullScreenCover(isPresented: $navigateToProgress) {
+            RunningInProgressView(viewModel: viewModel)
+        }
         .loadingOverlay(isLoading: $viewModel.isLoading)
         .errorAlert(errorMessage: $viewModel.errorMessage)
+        .onAppear {
+            // AppState의 사용자 정보를 ViewModel에 전달
+            viewModel.currentUserUuid = appState.currentUser?.uuid
+        }
     }
 }
 
@@ -136,7 +147,7 @@ struct StatBox: View {
 struct RunModeSelectionView: View {
     @ObservedObject var viewModel: RunViewModel
     @Environment(\.dismiss) var dismiss
-    @State private var navigateToProgress = false
+    var onStartRunning: () -> Void
     
     var body: some View {
         NavigationView {
@@ -149,7 +160,11 @@ struct RunModeSelectionView: View {
                 VStack(spacing: 12) {
                     Button(action: {
                         viewModel.startRunning(type: .normal)
-                        navigateToProgress = true
+                        dismiss()
+                        // 약간의 딜레이 후 러닝 화면 표시
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            onStartRunning()
+                        }
                     }) {
                         Text("일반 러닝")
                             .font(.system(size: 16, weight: .semibold))
@@ -162,7 +177,11 @@ struct RunModeSelectionView: View {
                     
                     Button(action: {
                         viewModel.startRunning(type: .aiChallenge)
-                        navigateToProgress = true
+                        dismiss()
+                        // 약간의 딜레이 후 러닝 화면 표시
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            onStartRunning()
+                        }
                     }) {
                         ZStack {
                             Text("AI 챌린지 러닝")
@@ -212,9 +231,6 @@ struct RunModeSelectionView: View {
                     }
                 }
             }
-        }
-        .fullScreenCover(isPresented: $navigateToProgress) {
-            RunningInProgressView(viewModel: viewModel)
         }
     }
 }

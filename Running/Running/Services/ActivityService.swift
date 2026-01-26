@@ -68,6 +68,9 @@ class ActivityService {
         challengeUuid: String? = nil,
         startTime: Date
     ) -> AnyPublisher<ActivityResponseDTO, NetworkError> {
+        print("[ActivityService] 🔵 createActivity 요청 시작")
+        print("[ActivityService] 📤 userUuid=\(userUuid), challengeUuid=\(challengeUuid ?? "nil"), startTime=\(startTime)")
+        
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         
@@ -82,6 +85,17 @@ class ActivityService {
             method: .post,
             body: dto
         )
+        .handleEvents(
+            receiveOutput: { response in
+                print("[ActivityService] ✅ createActivity 성공: activity.uuid=\(response.activity.uuid)")
+            },
+            receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    print("[ActivityService] ❌ createActivity 실패: \(error)")
+                }
+            }
+        )
+        .eraseToAnyPublisher()
     }
     
     // MARK: - Update Activity (End Running)

@@ -41,6 +41,7 @@ class RunViewModel: ObservableObject {
     var currentUserUuid: String?
     
     func startRunning(type: RunningType) {
+        print("[RunViewModel] 🔵 러닝 시작 요청: type=\(type == .normal ? "일반" : "AI 챌린지")")
         isLoading = true
         errorMessage = nil
         
@@ -49,19 +50,26 @@ class RunViewModel: ObservableObject {
         self.activityStartTime = startTime
         
         guard let userUuid = currentUserUuid else {
+            print("[RunViewModel] ❌ 사용자 UUID가 없습니다")
             errorMessage = "사용자 정보를 찾을 수 없습니다"
             isLoading = false
             return
         }
         
+        print("[RunViewModel] ✅ 사용자 UUID: \(userUuid)")
+        print("[RunViewModel] 📤 활동 시작 API 호출: startTime=\(startTime)")
+        
         if type == .aiChallenge {
             // Create challenge first
+            print("[RunViewModel] 🔵 AI 챌린지 생성 시작")
             challengeService.createChallenge(userUuid: userUuid)
                 .flatMap { [weak self] response -> AnyPublisher<ActivityResponseDTO, NetworkError> in
                     guard let self = self else {
                         return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
                     }
+                    print("[RunViewModel] ✅ 챌린지 생성 성공: UUID=\(response.challenge.uuid)")
                     self.currentChallengeUuid = response.challenge.uuid
+                    print("[RunViewModel] 📤 활동 생성 API 호출: challengeUuid=\(response.challenge.uuid)")
                     return self.activityService.createActivity(
                         userUuid: userUuid,
                         challengeUuid: response.challenge.uuid,
@@ -73,21 +81,28 @@ class RunViewModel: ObservableObject {
                     receiveCompletion: { [weak self] completion in
                         self?.isLoading = false
                         if case .failure(let error) = completion {
+                            print("[RunViewModel] ❌ 활동 시작 실패: \(error)")
                             self?.errorMessage = error.errorDescription
+                        } else {
+                            print("[RunViewModel] ✅ 활동 시작 성공")
                         }
                     },
                     receiveValue: { [weak self] response in
-                        self?.currentActivityUuid = response.activity.uuid
-                        self?.isRunning = true
-                        self?.isPaused = false
-                        self?.startTimer()
-                        self?.startLocationTracking()
-                        self?.startRouteTracking()
+                        guard let self = self else { return }
+                        print("[RunViewModel] ✅ 활동 생성 성공: UUID=\(response.activity.uuid)")
+                        self.currentActivityUuid = response.activity.uuid
+                        self.isRunning = true
+                        self.isPaused = false
+                        self.startTimer()
+                        self.startLocationTracking()
+                        self.startRouteTracking()
+                        print("[RunViewModel] ✅ 타이머 및 위치 추적 시작")
                     }
                 )
                 .store(in: &cancellables)
         } else {
             // Normal run
+            print("[RunViewModel] 📤 일반 러닝 활동 생성 API 호출")
             activityService.createActivity(
                 userUuid: userUuid,
                 challengeUuid: nil,
@@ -98,16 +113,22 @@ class RunViewModel: ObservableObject {
                 receiveCompletion: { [weak self] completion in
                     self?.isLoading = false
                     if case .failure(let error) = completion {
+                        print("[RunViewModel] ❌ 활동 시작 실패: \(error)")
                         self?.errorMessage = error.errorDescription
+                    } else {
+                        print("[RunViewModel] ✅ 활동 시작 성공")
                     }
                 },
                 receiveValue: { [weak self] response in
-                    self?.currentActivityUuid = response.activity.uuid
-                    self?.isRunning = true
-                    self?.isPaused = false
-                    self?.startTimer()
-                    self?.startLocationTracking()
-                    self?.startRouteTracking()
+                    guard let self = self else { return }
+                    print("[RunViewModel] ✅ 활동 생성 성공: UUID=\(response.activity.uuid)")
+                    self.currentActivityUuid = response.activity.uuid
+                    self.isRunning = true
+                    self.isPaused = false
+                    self.startTimer()
+                    self.startLocationTracking()
+                    self.startRouteTracking()
+                    print("[RunViewModel] ✅ 타이머 및 위치 추적 시작")
                 }
             )
             .store(in: &cancellables)
