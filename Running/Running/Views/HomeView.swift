@@ -48,7 +48,8 @@ struct HomeView: View {
                         Spacer()
                         
                         Button("사용하기") {
-                            // TODO: 포인트 사용 화면으로 이동
+                            // Shop 화면으로 이동
+                            appState.selectedTab = .shop
                         }
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(Color.emerald500)
@@ -160,6 +161,7 @@ struct HomeView: View {
                     .cornerRadius(16)
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
+                    .padding(.bottom, 80) // 하단 바 공간 확보
                 }
             }
         }

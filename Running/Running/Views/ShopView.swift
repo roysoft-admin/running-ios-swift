@@ -122,7 +122,7 @@ struct ShopView: View {
                 )
                 .cornerRadius(16)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .padding(.bottom, 96) // 하단 바 공간 확보 (16 + 80)
             }
         }
         .background(Color.gray50)

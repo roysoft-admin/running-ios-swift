@@ -130,6 +130,7 @@ struct ReportView: View {
                     .cornerRadius(12)
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
+                    .padding(.bottom, 80) // 하단 바 공간 확보
             }
         }
         .background(Color.gray50)

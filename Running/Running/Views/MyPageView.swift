@@ -153,7 +153,8 @@ struct MyPageView: View {
                         Spacer()
                         
                         Button("사용하기") {
-                            // TODO: 샵 화면으로 이동
+                            // Shop 화면으로 이동
+                            appState.selectedTab = .shop
                         }
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
@@ -272,7 +273,7 @@ struct MyPageView: View {
                 Text("v1.0.0")
                     .font(.system(size: 12))
                     .foregroundColor(.gray400)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 96) // 하단 바 공간 확보 (16 + 80)
             }
         }
         .background(Color.gray50)
