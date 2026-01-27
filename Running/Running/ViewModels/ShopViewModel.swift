@@ -10,7 +10,7 @@ import Combine
 
 class ShopViewModel: ObservableObject {
     @Published var currentPoints: Int = 0
-    @Published var selectedCategory: ShopItem.ProductCategory = .all
+    @Published var selectedCategoryUuid: String? = nil // nil = "전체"
     @Published var shopItems: [ShopItem] = []
     @Published var shopCategories: [ShopCategory] = []
     @Published var isLoading: Bool = false
@@ -32,7 +32,7 @@ class ShopViewModel: ObservableObject {
     
     func loadUserPoints() {
         guard let userUuid = currentUserUuid else {
-            errorMessage = "사용자 정보를 찾을 수 없습니다"
+            // currentUserUuid가 설정되지 않았으면 나중에 다시 시도
             return
         }
         
@@ -67,10 +67,10 @@ class ShopViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func loadShopItems() {
+    func loadShopItems(categoryUuid: String? = nil) {
         isLoading = true
         
-        shopService.getShopItems()
+        shopService.getShopItems(shopCategoryUuid: categoryUuid)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -86,11 +86,9 @@ class ShopViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    var filteredProducts: [ShopItem] {
-        if selectedCategory == .all {
-            return shopItems
-        }
-        return shopItems.filter { $0.category == selectedCategory }
+    func selectCategory(_ categoryUuid: String?) {
+        selectedCategoryUuid = categoryUuid
+        loadShopItems(categoryUuid: categoryUuid)
     }
     
     func purchaseProduct(_ shopItem: ShopItem, authUuid: String? = nil) {

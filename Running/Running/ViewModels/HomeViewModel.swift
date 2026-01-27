@@ -11,7 +11,7 @@ import Combine
 class HomeViewModel: ObservableObject {
     @Published var currentUser: User?
     @Published var currentPoints: Int = 0
-    @Published var loginRewardClaimed: Bool = false
+    @Published var loginRewardClaimed: Bool = true  // 초기값 true: API 체크 완료 전까지 버튼 숨김
     @Published var selectedTab: StatsTab = .daily
     @Published var dailyStats: DailyStats?
     @Published var weeklyStats: WeeklyStats?
@@ -80,11 +80,13 @@ class HomeViewModel: ObservableObject {
                     if let dailyLoginPoint = response.points.first(where: { $0.title == "출석 보상" || $0.title.contains("출석") }) {
                         self.dailyLoginPointUuid = dailyLoginPoint.uuid
                         print("[HomeViewModel] ✅ 출석 보상 Point 찾음: UUID=\(dailyLoginPoint.uuid), 포인트=\(dailyLoginPoint.point)")
-                        
-                        // 출석 보상 체크 및 자동 제공
-                        self.checkAndClaimDailyLoginReward()
                     } else {
                         print("[HomeViewModel] ⚠️ 출석 보상 Point를 찾을 수 없습니다")
+                    }
+                    
+                    // Point UUID 설정 후, 사용자 정보가 이미 로드되어 있으면 출석 보상 체크
+                    // 사용자 정보가 아직 로드되지 않았으면 loadUser() 완료 후 자동으로 체크됨
+                    if self.currentUser != nil || self.currentUserUuid != nil {
                         self.checkAndClaimDailyLoginReward()
                     }
                 }
@@ -107,9 +109,15 @@ class HomeViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] response in
-                    self?.currentUser = response.user
-                    self?.currentPoints = response.user.point
-                    self?.currentUserUuid = response.user.uuid
+                    guard let self = self else { return }
+                    self.currentUser = response.user
+                    self.currentPoints = response.user.point
+                    self.currentUserUuid = response.user.uuid
+                    
+                    // 사용자 정보 로드 완료 후 출석 보상 체크 (dailyLoginPointUuid가 설정되어 있을 때만)
+                    if self.dailyLoginPointUuid != nil {
+                        self.checkAndClaimDailyLoginReward()
+                    }
                 }
             )
             .store(in: &cancellables)
@@ -377,6 +385,8 @@ class HomeViewModel: ObservableObject {
                 if case .failure(let error) = completion {
                     print("[HomeViewModel] ❌ 출석 보상 체크 실패: \(error)")
                     // 에러가 발생해도 계속 진행 (출석 보상은 선택 사항)
+                    // 에러 시 버튼 표시 (출석 보상을 받지 않았을 가능성이 높음)
+                    self?.loginRewardClaimed = false
                 }
             },
             receiveValue: { [weak self] response in
