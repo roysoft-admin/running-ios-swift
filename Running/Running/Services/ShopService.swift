@@ -32,14 +32,14 @@ class ShopService {
     // MARK: - Get Shop Items
     
     func getShopItems(
-        shopCategoryId: Int? = nil,
+        shopCategoryUuid: String? = nil,
         offset: Int? = nil,
         limit: Int? = nil
     ) -> AnyPublisher<ShopItemsListResponseDTO, NetworkError> {
         var queryItems: [URLQueryItem] = []
         
-        if let shopCategoryId = shopCategoryId {
-            queryItems.append(URLQueryItem(name: "shop_category_id", value: String(shopCategoryId)))
+        if let shopCategoryUuid = shopCategoryUuid {
+            queryItems.append(URLQueryItem(name: "shop_category_uuid", value: shopCategoryUuid))
         }
         
         if let offset = offset {

@@ -95,6 +95,32 @@ class AuthService {
     func signOut() {
         tokenManager.clearTokens()
     }
+    
+    // MARK: - Verification Request
+    
+    func requestVerification(type: String, email: String? = nil, phone: String? = nil) -> AnyPublisher<VerificationRequestResponseDTO, NetworkError> {
+        let dto = VerificationRequestDTO(type: type, email: email, phone: phone)
+        
+        return apiService.request(
+            endpoint: "/auth/verification-request",
+            method: .post,
+            body: dto,
+            requiresAuth: true
+        )
+    }
+    
+    // MARK: - Verify
+    
+    func verify(authUuid: String, code: String) -> AnyPublisher<VerifyResponseDTO, NetworkError> {
+        let dto = VerifyDTO(authUuid: authUuid, code: code)
+        
+        return apiService.request(
+            endpoint: "/auth/verify",
+            method: .post,
+            body: dto,
+            requiresAuth: true
+        )
+    }
 }
 
 // 백엔드: POST /auth/token 요청
@@ -113,6 +139,44 @@ struct TokenRefreshResponseDTO: Codable {
     enum CodingKeys: String, CodingKey {
         case accessToken      // 백엔드가 camelCase로 응답
         case refreshToken     // 백엔드가 camelCase로 응답
+    }
+}
+
+// MARK: - Verification DTOs
+
+struct VerificationRequestDTO: Codable {
+    let type: String
+    let email: String?
+    let phone: String?
+}
+
+struct VerificationRequestResponseDTO: Codable {
+    let authUuid: String
+    let code: String?  // 개발 환경에서만 반환
+    
+    enum CodingKeys: String, CodingKey {
+        case authUuid = "auth_uuid"
+        case code
+    }
+}
+
+struct VerifyDTO: Codable {
+    let authUuid: String
+    let code: String
+    
+    enum CodingKeys: String, CodingKey {
+        case authUuid = "auth_uuid"
+        case code
+    }
+}
+
+struct VerifyResponseDTO: Codable {
+    let success: Bool
+    let authUuid: String
+    
+    enum CodingKeys: String, CodingKey {
+        case success
+        case authUuid = "auth_uuid"
     }
 }
 

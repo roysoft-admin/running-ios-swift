@@ -9,9 +9,12 @@ import SwiftUI
 
 struct ShopView: View {
     @StateObject private var viewModel = ShopViewModel()
+    @EnvironmentObject var appState: AppState
+    @State private var selectedShopItem: ShopItem?
     
     var body: some View {
-        ScrollView {
+        NavigationView {
+            ScrollView {
             VStack(spacing: 0) {
                 // Header
                 VStack(alignment: .leading, spacing: 16) {
@@ -39,15 +42,16 @@ struct ShopView: View {
                         
                         Spacer()
                         
-                        Button("히스토리") {
-                            // TODO: 히스토리 화면으로 이동
+                        NavigationLink(destination: PurchaseHistoryView()) {
+                            Text("히스토리")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.2))
+                                .cornerRadius(12)
                         }
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.white.opacity(0.2))
-                        .cornerRadius(12)
+                        .buttonStyle(PlainButtonStyle())
                     }
                     .padding(16)
                     .background(
@@ -65,12 +69,21 @@ struct ShopView: View {
                 // Categories
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach([ShopItem.ProductCategory.all, .fnb, .voucher, .coupon, .culture], id: \.self) { category in
+                        // "전체" 카테고리
+                        CategoryButton(
+                            title: "전체",
+                            isSelected: viewModel.selectedCategoryUuid == nil
+                        ) {
+                            viewModel.selectCategory(nil)
+                        }
+                        
+                        // API로 받아온 카테고리들
+                        ForEach(viewModel.shopCategories) { category in
                             CategoryButton(
-                                title: category.rawValue,
-                                isSelected: viewModel.selectedCategory == category
+                                title: category.name,
+                                isSelected: viewModel.selectedCategoryUuid == category.uuid
                             ) {
-                                viewModel.selectedCategory = category
+                                viewModel.selectCategory(category.uuid)
                             }
                         }
                     }
@@ -84,11 +97,12 @@ struct ShopView: View {
                     ProgressView()
                         .frame(height: 200)
                 } else {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        ForEach(viewModel.filteredProducts) { shopItem in
-                            ProductCard(product: shopItem) {
-                                viewModel.purchaseProduct(shopItem)
-                            }
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
+                        ForEach(viewModel.shopItems) { shopItem in
+                            ProductCardWithNavigation(
+                                product: shopItem,
+                                currentPoints: viewModel.currentPoints
+                            )
                         }
                     }
                     .padding(16)
@@ -124,14 +138,16 @@ struct ShopView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 96) // 하단 바 공간 확보 (16 + 80)
             }
+            }
+            .background(Color.gray50)
+            .navigationTitle("포인트 샵")
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .background(Color.gray50)
         .loadingOverlay(isLoading: $viewModel.isLoading)
         .errorAlert(errorMessage: $viewModel.errorMessage)
-        .alert("구매 완료", isPresented: $viewModel.purchaseSuccess) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text("상품 구매가 완료되었습니다.")
+        .onAppear {
+            viewModel.currentUserUuid = appState.currentUser?.uuid
+            viewModel.loadUserPoints()
         }
     }
 }
@@ -154,20 +170,60 @@ struct CategoryButton: View {
     }
 }
 
+struct ProductCardWithNavigation: View {
+    let product: ShopItem
+    let currentPoints: Int
+    
+    var body: some View {
+        NavigationLink(destination: PurchaseView(viewModel: PurchaseViewModel(
+            shopItem: product,
+            currentPoints: currentPoints,
+            initialPhoneNumber: nil // TODO: 사용자 전화번호 가져오기
+        ))) {
+            ProductCard(product: product)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
 struct ProductCard: View {
     let product: ShopItem
-    let action: () -> Void
     
     var body: some View {
         VStack(spacing: 0) {
             // Product Image
-            ZStack {
-                Color.gray100
-                
-                Text(product.image)
-                    .font(.system(size: 48))
+            GeometryReader { geometry in
+                ZStack {
+                    Color.gray100
+                    
+                    if let imageUrl = product.imageUrl, !imageUrl.isEmpty {
+                        let fullUrl = imageUrl.hasPrefix("http") ? imageUrl : "http://localhost:3031\(imageUrl.hasPrefix("/") ? imageUrl : "/\(imageUrl)")"
+                        AsyncImage(url: URL(string: fullUrl)) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView()
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: geometry.size.width, height: geometry.size.width)
+                            case .failure:
+                                Text("📦")
+                                    .font(.system(size: 48))
+                            @unknown default:
+                                Text("📦")
+                                    .font(.system(size: 48))
+                            }
+                        }
+                    } else {
+                        Text("📦")
+                            .font(.system(size: 48))
+                    }
+                }
+                .frame(width: geometry.size.width, height: geometry.size.width)
+                .clipped()
             }
-            .frame(height: 160)
+            .aspectRatio(1, contentMode: .fit)
             
             // Product Info
             VStack(alignment: .leading, spacing: 8) {
@@ -179,7 +235,8 @@ struct ProductCard: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.gray900)
                     .lineLimit(2)
-                    .frame(height: 40, alignment: .top)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 
                 HStack {
                     Text("\(product.point)P")
@@ -188,14 +245,12 @@ struct ProductCard: View {
                     
                     Spacer()
                     
-                    Button(action: action) {
-                        Image(systemName: "cart.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(.white)
-                            .frame(width: 36, height: 36)
-                            .background(Color.emerald500)
-                            .cornerRadius(10)
-                    }
+                    Image(systemName: "cart.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color.emerald500)
+                        .cornerRadius(10)
                 }
             }
             .padding(16)

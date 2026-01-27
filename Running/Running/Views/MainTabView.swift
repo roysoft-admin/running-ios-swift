@@ -25,9 +25,7 @@ struct MainTabView: View {
                         HomeView()
                     }
                 case .shop:
-                    NavigationView {
-                        ShopView()
-                    }
+                    ShopView()
                 case .myPage:
                     NavigationView {
                         MyPageView()

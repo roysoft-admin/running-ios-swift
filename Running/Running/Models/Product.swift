@@ -18,8 +18,8 @@ struct ShopCategory: BaseEntityProtocol, Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id
         case uuid
-        case createdAt = "created_at"
-        case deletedAt = "deleted_at"
+        case createdAt
+        case deletedAt
         case name
     }
 }
@@ -34,18 +34,20 @@ struct ShopItem: BaseEntityProtocol, Codable, Identifiable {
     let shopCategoryId: Int
     let point: Int
     let order: Int
+    let imageUrl: String?
     var shopCategory: ShopCategory?
     
     enum CodingKeys: String, CodingKey {
         case id
         case uuid
-        case createdAt = "created_at"
-        case deletedAt = "deleted_at"
+        case createdAt
+        case deletedAt
         case name
-        case shopCategoryId = "shop_category_id"
+        case shopCategoryId
         case point
         case order
-        case shopCategory = "shop_category"
+        case imageUrl
+        case shopCategory
     }
     
     // Computed properties for UI compatibility
@@ -78,12 +80,12 @@ struct UserShopItem: BaseEntityProtocol, Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id
         case uuid
-        case createdAt = "created_at"
-        case deletedAt = "deleted_at"
-        case userId = "user_id"
-        case shopItemId = "shop_item_id"
-        case authUuid = "auth_uuid"
-        case shopItem = "shop_item"
+        case createdAt
+        case deletedAt
+        case userId
+        case shopItemId
+        case authUuid
+        case shopItem
     }
 }
 

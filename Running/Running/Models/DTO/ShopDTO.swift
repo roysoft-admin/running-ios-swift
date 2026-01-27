@@ -28,9 +28,11 @@ struct ShopItemsListResponseDTO: Codable {
 
 struct ShopCategoriesListResponseDTO: Codable {
     let shopCategories: [ShopCategory]
+    let totalCount: Int
     
     enum CodingKeys: String, CodingKey {
         case shopCategories = "shop-categories"
+        case totalCount = "total_count"
     }
 }
 
