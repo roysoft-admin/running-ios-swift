@@ -61,11 +61,6 @@ struct LoginView: View {
                             // viewModel.loginWithNaver(token: naverToken)
                             viewModel.errorMessage = "Naver 로그인은 준비 중입니다."
                         }
-                        
-                        SocialLoginButton(provider: .facebook) {
-                            // TODO: Facebook 로그인 (필요시)
-                            viewModel.errorMessage = "Facebook 로그인은 준비 중입니다."
-                        }
                     }
                     .padding(.horizontal, 24)
                 }
