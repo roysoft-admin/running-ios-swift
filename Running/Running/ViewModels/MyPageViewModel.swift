@@ -14,6 +14,7 @@ class MyPageViewModel: ObservableObject {
     @Published var darkMode: Bool = false
     @Published var showInquiryModal: Bool = false
     @Published var showEmailVerification: Bool = false
+    @Published var showPhoneVerification: Bool = false
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     
@@ -22,16 +23,25 @@ class MyPageViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     // TODO: Get current user UUID from app state
-    var currentUserUuid: String?
+    var currentUserUuid: String? {
+        didSet {
+            if currentUserUuid != nil {
+                loadData()
+            }
+        }
+    }
     
     init() {
+        // currentUserUuid가 설정되면 자동으로 loadData()가 호출됨
+    }
+    
+    func loadData() {
         loadUser()
         loadPointHistory()
     }
     
     func loadUser() {
-        guard let userUuid = currentUserUuid ?? user?.uuid else {
-            errorMessage = "사용자 정보를 찾을 수 없습니다"
+        guard let userUuid = currentUserUuid else {
             return
         }
         

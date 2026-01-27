@@ -195,6 +195,7 @@ class AppState: ObservableObject {
         authService.signOut()
         isLoggedIn = false
         currentUser = nil  // 사용자 정보도 삭제
+        selectedTab = .home // 다음 로그인 시 항상 홈에서 시작
         print("[AppState] ✅ 로그아웃 완료, 토큰 삭제됨")
     }
 }

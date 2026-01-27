@@ -11,13 +11,14 @@ struct MyPageView: View {
     @StateObject private var viewModel = MyPageViewModel()
     @State private var showWebView: Bool = false
     @State private var webViewURL: WebViewURL?
+    @State private var showProfileEdit: Bool = false
     @EnvironmentObject var appState: AppState
     
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 // Profile Section
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 16) {
                         ZStack {
                             Circle()
@@ -48,65 +49,16 @@ struct MyPageView: View {
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundColor(.white)
                             
-                            Text(viewModel.user?.email ?? "")
-                                .font(.system(size: 14))
-                                .foregroundColor(.white.opacity(0.9))
+                            if let email = viewModel.user?.email, !email.isEmpty {
+                                Text(email)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white.opacity(0.9))
+                            }
                         }
+                        
+                        Spacer()
                     }
-                    
-                    if viewModel.user?.isSubscription != true {
-                        Button(action: {}) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "crown.fill")
-                                    .font(.system(size: 18))
-                                
-                                Text("프리미엄 구독하기 (2배 포인트!)")
-                                    .font(.system(size: 16, weight: .bold))
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.yellow, Color.orange500]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(16)
-                        }
-                    } else {
-                        HStack {
-                            HStack(spacing: 12) {
-                                Image(systemName: "crown.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.yellow)
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("프리미엄 회원")
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundColor(.white)
-                                    
-                                    Text("2배 포인트 적용 중")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.white.opacity(0.9))
-                                }
-                            }
-                            
-                            Spacer()
-                            
-                            Button("관리") {
-                                // TODO: 구독 관리 화면으로 이동
-                            }
-                            .font(.system(size: 12))
-                            .foregroundColor(.white)
-                            .underline()
-                        }
-                        .padding(16)
-                        .background(Color.white.opacity(0.2))
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(16)
-                    }
+                    .padding(.bottom, 24)
                 }
                 .padding(24)
                 .background(
@@ -132,11 +84,12 @@ struct MyPageView: View {
                         
                         Spacer()
                         
-                        Button("전체보기") {
-                            // TODO: 포인트 내역 화면으로 이동
+                        NavigationLink(destination: PointHistoryView()) {
+                            Text("전체보기")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Color.emerald500)
                         }
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color.emerald500)
+                        .buttonStyle(PlainButtonStyle())
                     }
                     
                     HStack {
@@ -199,9 +152,14 @@ struct MyPageView: View {
                 .padding(.top, -16)
                 .padding(.bottom, 16)
                 
-                // Profile Edit Section
+                // Profile Edit / 인증 Section
                 MenuSection(title: nil, items: [
-                    MenuItem(icon: "person", title: "프로필 수정", action: {}),
+                    MenuItem(icon: "person", title: "프로필 수정", action: {
+                        showProfileEdit = true
+                    }),
+                    MenuItem(icon: "phone", title: "전화번호 인증", action: {
+                        viewModel.showPhoneVerification = true
+                    }),
                     MenuItem(icon: "envelope", title: "이메일 변경", subtitle: viewModel.user?.email ?? "", action: {
                         viewModel.showEmailVerification = true
                     })
@@ -285,10 +243,24 @@ struct MyPageView: View {
         .sheet(isPresented: $viewModel.showEmailVerification) {
             EmailVerificationModalView()
         }
+        .sheet(isPresented: $viewModel.showPhoneVerification) {
+            PhoneVerificationModalView()
+        }
         .sheet(isPresented: $showWebView) {
             if let url = webViewURL {
                 WebViewScreen(urlString: url.urlString, title: url.title)
             }
+        }
+        .sheet(isPresented: $showProfileEdit) {
+            NavigationView {
+                ProfileEditView { updatedUser in
+                    // 프로필 수정 후 마이페이지 이름/정보를 즉시 갱신
+                    viewModel.user = updatedUser
+                }
+            }
+        }
+        .onAppear {
+            viewModel.currentUserUuid = appState.currentUser?.uuid
         }
     }
 }
@@ -386,6 +358,28 @@ struct EmailVerificationModalView: View {
                     .padding()
             }
             .navigationTitle("이메일 변경")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("닫기") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct PhoneVerificationModalView: View {
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("전화번호 인증 모달")
+                    .padding()
+            }
+            .navigationTitle("전화번호 인증")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

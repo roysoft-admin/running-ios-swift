@@ -55,6 +55,7 @@ struct UpdateUserDTO: Codable {
     var weight: Double?
     var isSubscription: Bool?
     var authUuid: String?
+    var location: String?
     
     enum CodingKeys: String, CodingKey {
         case name
@@ -67,6 +68,7 @@ struct UpdateUserDTO: Codable {
         case weight
         case isSubscription = "is_subscription"
         case authUuid = "auth_uuid"
+        case location
     }
 }
 

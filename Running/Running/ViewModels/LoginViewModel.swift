@@ -96,8 +96,12 @@ class LoginViewModel: ObservableObject {
                     }
                     
                     // 사용자 정보를 AppState에 저장
-                    self?.appState?.currentUser = response.user
-                    print("[LoginViewModel] ✅ 사용자 정보 저장됨: UUID=\(response.user.uuid), 이름=\(response.user.name ?? "nil")")
+                    if let appState = self?.appState {
+                        appState.currentUser = response.user
+                        // 로그인 완료 시 항상 홈 탭으로 이동
+                        appState.selectedTab = .home
+                        print("[LoginViewModel] ✅ 사용자 정보 저장 및 홈 탭으로 이동 설정")
+                    }
                     
                     print("[LoginViewModel] 🔵 로그인 성공, 화면 이동 준비")
                     self?.loginSuccess = true
