@@ -167,13 +167,12 @@ struct MyPageView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
                 
-                // Settings Section
+                // Settings Section (푸시 알림만 사용)
                 MenuSection(title: "설정", items: [
                     MenuItem(icon: "bell", title: "푸시 알림", hasToggle: true, toggleValue: Binding(
                         get: { viewModel.pushEnabled },
                         set: { viewModel.updatePushNotification(enabled: $0) }
-                    )),
-                    MenuItem(icon: "moon", title: "다크 모드", hasToggle: true, toggleValue: $viewModel.darkMode)
+                    ))
                 ])
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)

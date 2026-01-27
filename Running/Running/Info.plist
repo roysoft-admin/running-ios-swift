@@ -13,5 +13,19 @@
 			</array>
 		</dict>
 	</array>
+	<!-- ATS 설정: roysoft.co.kr 도메인에 대한 예외 추가 (HTTP 리다이렉트 등 허용) -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>roysoft.co.kr</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>
