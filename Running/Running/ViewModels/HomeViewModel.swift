@@ -390,9 +390,9 @@ class HomeViewModel: ObservableObject {
                     self.loginRewardClaimed = true
                     print("[HomeViewModel] ✅ 오늘 출석 보상을 이미 받았습니다 - 출석 버튼 숨김")
                 } else {
-                    // 출석 보상을 받지 않았으면 자동으로 제공
-                    print("[HomeViewModel] 🔵 출석 보상 자동 제공 시작 (자동 클릭)")
-                    self.claimDailyLoginReward()
+                    // 출석 보상을 받지 않았으면 버튼 표시 (자동 클레임 제거)
+                    self.loginRewardClaimed = false
+                    print("[HomeViewModel] ✅ 출석 보상 버튼 표시 (사용자가 직접 클릭해야 함)")
                 }
             }
         )

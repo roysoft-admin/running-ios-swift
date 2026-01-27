@@ -18,7 +18,7 @@ struct HomeView: View {
                 // Header
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("안녕하세요, 러너님! 👋")
+                        Text("안녕하세요, \(viewModel.currentUser?.name ?? "러너")님! 👋")
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.white)
                         
@@ -136,6 +136,7 @@ struct HomeView: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .padding(.top, viewModel.loginRewardClaimed || viewModel.currentUser == nil ? 24 : 16)
                 
                 // Achievement Section (미션이 있을 때만 표시)
                 if !viewModel.achievements.isEmpty {
