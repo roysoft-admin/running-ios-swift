@@ -180,6 +180,20 @@ struct HomeView: View {
                 viewModel.loadData()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ActivityCompleted"))) { _ in
+            // 러닝 완료 후 홈 화면 통계 새로고침
+            viewModel.loadData()
+            // 사용자 정보도 새로고침 (포인트 업데이트를 위해)
+            viewModel.loadUser()
+        }
+        .onChange(of: appState.selectedTab) { newTab in
+            // 홈 탭으로 전환될 때 새로고침
+            if newTab == .home {
+                viewModel.currentUserUuid = appState.currentUser?.uuid
+                viewModel.currentUser = appState.currentUser
+                viewModel.loadData()
+            }
+        }
     }
 }
 
@@ -441,6 +455,16 @@ struct StatCard: View {
 struct AchievementRow: View {
     let achievement: Achievement
     
+    // 남은 일수 계산
+    var daysRemaining: Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let missionDuration: Int = achievement.term == .week ? 7 : 30
+        let endDate = calendar.date(byAdding: .day, value: missionDuration, to: achievement.createdAt) ?? achievement.createdAt
+        let days = calendar.dateComponents([.day], from: now, to: endDate).day ?? 0
+        return max(0, days)
+    }
+    
     var body: some View {
         HStack {
             ZStack {
@@ -460,25 +484,52 @@ struct AchievementRow: View {
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(achievement.title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(achievement.isCompleted ? .gray900 : .gray600)
+                HStack(spacing: 6) {
+                    Text(achievement.title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(achievement.isCompleted ? .gray900 : .gray600)
+                    
+                    // 미션 기간 표시
+                    Text(achievement.term == .week ? "주간" : "월간")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            achievement.term == .week ? Color.blue500 : Color.purple500
+                        )
+                        .cornerRadius(4)
+                }
                 
                 Text(achievement.description)
                     .font(.system(size: 12))
                     .foregroundColor(.gray500)
+                
+                // 남은 일수 표시
+                if !achievement.isCompleted && achievement.status == .inProgress {
+                    Text("\(daysRemaining)일 남음")
+                        .font(.system(size: 10))
+                        .foregroundColor(daysRemaining <= 3 ? Color.red500 : Color.gray500)
+                }
             }
             
             Spacer()
             
-            if achievement.isCompleted {
-                Text("+\(achievement.rewardPoints)P")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color.orange500)
-            } else {
-                Text("곧 지급")
+            VStack(alignment: .trailing, spacing: 4) {
+                // 서버 상태를 그대로 표시
+                Text(achievement.status.rawValue)
                     .font(.system(size: 12))
-                    .foregroundColor(.gray400)
+                    .foregroundColor(
+                        achievement.status == .completed ? Color.orange500 :
+                        achievement.status == .inProgress ? Color.emerald500 : Color.gray400
+                    )
+                
+                // 완료된 경우에만 포인트 표시
+                if achievement.isCompleted {
+                    Text("+\(achievement.rewardPoints)P")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(Color.orange500)
+                }
             }
         }
         .padding(12)

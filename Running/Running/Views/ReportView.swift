@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ReportView: View {
     @StateObject private var viewModel = ReportViewModel()
+    @EnvironmentObject var appState: AppState
     
     var body: some View {
         ScrollView {
@@ -137,6 +138,18 @@ struct ReportView: View {
         .loadingOverlay(isLoading: $viewModel.isLoading)
         .errorAlert(errorMessage: $viewModel.errorMessage)
         .onAppear {
+            // AppState의 사용자 정보를 ViewModel에 전달
+            viewModel.currentUserUuid = appState.currentUser?.uuid
+            viewModel.loadReports()
+        }
+        .onChange(of: appState.selectedTab) { newTab in
+            // 리포트 탭으로 전환될 때 새로고침
+            if newTab == .report {
+                viewModel.loadReports()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ActivityCompleted"))) { _ in
+            // 러닝 종료 후 리포트 목록 새로고침
             viewModel.loadReports()
         }
     }
@@ -223,6 +236,7 @@ struct ReportRow: View {
 
 struct ReportDetailView: View {
     let activityUuid: String
+    var showBackButton: Bool = false // fullScreenCover로 표시될 때만 true
     @StateObject private var viewModel = ReportViewModel()
     @State private var activity: Activity?
     @State private var isLoading: Bool = true
@@ -329,6 +343,21 @@ struct ReportDetailView: View {
         }
         .navigationTitle("러닝 상세")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if showBackButton {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("뒤로")
+                        }
+                        .foregroundColor(.emerald500)
+                    }
+                }
+            }
+        }
         .onAppear {
             viewModel.loadActivityDetail(activityUuid: activityUuid) { loadedActivity in
                 activity = loadedActivity

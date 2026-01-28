@@ -134,15 +134,12 @@ class ReportViewModel: ObservableObject {
     }
     
     func formatTime(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        let minutes = Int(seconds) / 60 % 60
-        let secs = Int(seconds) % 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, secs)
-        } else {
-            return String(format: "%d:%02d", minutes, secs)
-        }
+        let safe = max(0, Int(seconds))
+        let hours = safe / 3600
+        let minutes = (safe / 60) % 60
+        let secs = safe % 60
+        // 요구사항: 초 단위까지 노출 + 항상 HH:MM:SS 포맷
+        return String(format: "%02d:%02d:%02d", hours, minutes, secs)
     }
     
     func formatPace(_ pace: Double) -> String {

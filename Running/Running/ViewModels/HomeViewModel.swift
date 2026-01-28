@@ -342,7 +342,10 @@ class HomeViewModel: ObservableObject {
                         progress: progress,
                         target: target,
                         isCompleted: isCompleted,
-                        rewardPoints: mission.point
+                        rewardPoints: mission.point,
+                        status: userMission.status,  // 서버 상태 추가
+                        term: mission.term,  // 미션 기간 추가
+                        createdAt: userMission.createdAt  // 미션 시작일 추가
                     )
                 }
             }

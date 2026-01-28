@@ -38,13 +38,13 @@ struct Mission: BaseEntityProtocol, Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id
         case uuid
-        case createdAt = "created_at"
-        case deletedAt = "deleted_at"
+        case createdAt  // 백엔드가 camelCase로 응답
+        case deletedAt  // 백엔드가 camelCase로 응답
         case title
         case point
         case term
         case type
-        case targetValue = "target_value"
+        case targetValue  // 백엔드가 camelCase로 응답
     }
 }
 
@@ -59,17 +59,19 @@ struct UserMission: BaseEntityProtocol, Codable, Identifiable {
     let status: UserMissionStatus
     let userValue: Int
     var mission: Mission?
+    var user: User?
     
     enum CodingKeys: String, CodingKey {
         case id
         case uuid
-        case createdAt = "created_at"
-        case deletedAt = "deleted_at"
-        case userId = "user_id"
-        case missionId = "mission_id"
+        case createdAt  // 백엔드가 camelCase로 응답
+        case deletedAt  // 백엔드가 camelCase로 응답
+        case userId  // 백엔드가 camelCase로 응답
+        case missionId  // 백엔드가 camelCase로 응답
         case status
-        case userValue = "user_value"
+        case userValue  // 백엔드가 camelCase로 응답
         case mission
+        case user
     }
 }
 

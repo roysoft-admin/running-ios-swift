@@ -11,6 +11,9 @@ struct RunningInProgressView: View {
     @ObservedObject var viewModel: RunViewModel
     @Environment(\.dismiss) var dismiss
     @State private var showEndDialog = false
+    @State private var showFullScreenMap = false
+    @State private var showReportDetail = false
+    @State private var completedActivityUuid: String?
     
     var body: some View {
         ZStack {
@@ -20,7 +23,7 @@ struct RunningInProgressView: View {
                 // Map Area
                 ZStack {
                     if !viewModel.routes.isEmpty {
-                        ActivityMapView(routes: viewModel.routes, isInteractive: false)
+                        ActivityMapView(routes: viewModel.routes, isInteractive: true)
                             .ignoresSafeArea()
                     } else {
                         LinearGradient(
@@ -67,7 +70,9 @@ struct RunningInProgressView: View {
                             
                             Spacer()
                             
-                            Button(action: {}) {
+                            Button(action: {
+                                showFullScreenMap = true
+                            }) {
                                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                                     .font(.system(size: 20))
                                     .foregroundColor(.gray700)
@@ -208,13 +213,73 @@ struct RunningInProgressView: View {
             Button("계속하기", role: .cancel) {}
             Button("종료하기", role: .destructive) {
                 viewModel.stopRunning()
-                dismiss()
+                // dismiss()는 리포트 상세 화면으로 이동 후에 호출됨
             }
         } message: {
             VStack(alignment: .leading, spacing: 8) {
                 Text("거리: \(String(format: "%.2f", viewModel.distance))km")
                 Text("시간: \(viewModel.formatTime(viewModel.time))")
                 Text("칼로리: \(viewModel.calories)kcal")
+            }
+        }
+        .fullScreenCover(isPresented: $showFullScreenMap) {
+            FullScreenMapView(routes: viewModel.routes)
+        }
+        .fullScreenCover(isPresented: $showReportDetail) {
+            if let activityUuid = completedActivityUuid {
+                NavigationView {
+                    ReportDetailView(activityUuid: activityUuid, showBackButton: true)
+                        .onDisappear {
+                            // 리포트 상세 화면이 닫힐 때 러닝 화면도 닫기
+                            dismiss()
+                        }
+                }
+            }
+        }
+        .onChange(of: viewModel.completedActivityUuid) { newValue in
+            if let uuid = newValue {
+                completedActivityUuid = uuid
+                // 리포트 상세 화면 표시
+                showReportDetail = true
+                // 리포트 화면 새로고침을 위한 알림 전송
+                NotificationCenter.default.post(name: NSNotification.Name("ActivityCompleted"), object: nil)
+            }
+        }
+    }
+}
+
+struct FullScreenMapView: View {
+    let routes: [ActivityRoute]
+    @Environment(\.dismiss) var dismiss
+    @State private var isPresented = false
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                ActivityMapView(routes: routes, isInteractive: true)
+                    .ignoresSafeArea()
+                    .opacity(isPresented ? 1 : 0)
+                    .scaleEffect(isPresented ? 1 : 0.95)
+                    .animation(.easeInOut(duration: 0.3), value: isPresented)
+            }
+            .navigationTitle("지도")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("닫기") {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isPresented = false
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isPresented = true
+                }
             }
         }
     }

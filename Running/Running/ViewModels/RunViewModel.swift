@@ -23,12 +23,15 @@ class RunViewModel: ObservableObject {
     // Activity tracking
     @Published var currentActivityUuid: String?
     @Published var currentChallengeUuid: String?
+    @Published var completedActivityUuid: String? // 종료된 활동 UUID (리포트 상세 화면으로 이동용)
     @Published var routes: [ActivityRoute] = []
     
     private var timer: Timer?
     private var routeTimer: Timer?
     private var startTime: Date?
     private var activityStartTime: Date?
+    private var pauseStartTime: Date? // 일시정지 시작 시간
+    private var totalPausedTime: TimeInterval = 0 // 누적된 일시정지 시간
     private var locationManager: CLLocationManager?
     private var lastLocation: CLLocation?
     private var routeSeq: Int = 0
@@ -48,6 +51,9 @@ class RunViewModel: ObservableObject {
         let startTime = Date()
         self.startTime = startTime
         self.activityStartTime = startTime
+        self.pauseStartTime = nil
+        self.totalPausedTime = 0
+        self.time = 0
         
         guard let userUuid = currentUserUuid else {
             print("[RunViewModel] ❌ 사용자 UUID가 없습니다")
@@ -137,12 +143,20 @@ class RunViewModel: ObservableObject {
     
     func pauseRunning() {
         isPaused = true
+        pauseStartTime = Date() // 일시정지 시작 시간 저장
         timer?.invalidate()
         routeTimer?.invalidate()
     }
     
     func resumeRunning() {
+        guard let pauseStart = pauseStartTime else { return }
+        
+        // 일시정지한 시간을 누적
+        let pausedDuration = Date().timeIntervalSince(pauseStart)
+        totalPausedTime += pausedDuration
+        
         isPaused = false
+        pauseStartTime = nil
         startTimer()
         startRouteTracking()
     }
@@ -178,10 +192,14 @@ class RunViewModel: ObservableObject {
                 if case .failure(let error) = completion {
                     self?.errorMessage = error.errorDescription
                 } else {
+                    // 리포트 상세 화면으로 이동하기 위해 UUID 저장
+                    self?.completedActivityUuid = activityUuid
                     self?.reset()
                 }
             },
             receiveValue: { [weak self] _ in
+                // 리포트 상세 화면으로 이동하기 위해 UUID 저장
+                self?.completedActivityUuid = activityUuid
                 self?.reset()
             }
         )
@@ -197,26 +215,38 @@ class RunViewModel: ObservableObject {
         calories = 0
         currentActivityUuid = nil
         currentChallengeUuid = nil
+        // completedActivityUuid는 리포트 상세 화면으로 이동 후에 nil로 설정됨
         routes = []
         routeSeq = 0
         lastLocation = nil
         startTime = nil
         activityStartTime = nil
+        pauseStartTime = nil
+        totalPausedTime = 0
     }
     
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self = self, let startTime = self.startTime else { return }
             
-            let elapsed = Date().timeIntervalSince(startTime)
-            self.time = elapsed
+            // 일시정지 시간을 제외한 실제 경과 시간 계산
+            let currentElapsed = Date().timeIntervalSince(startTime)
+            let actualElapsed = currentElapsed - self.totalPausedTime
+            
+            // 현재 일시정지 중이면 추가로 빼기
+            if let pauseStart = self.pauseStartTime {
+                let currentPaused = Date().timeIntervalSince(pauseStart)
+                self.time = actualElapsed - currentPaused
+            } else {
+                self.time = actualElapsed
+            }
             
             // Calculate calories (approximate: 65 kcal per km)
             self.calories = Int(self.distance * 65)
             
             // Calculate pace
             if self.distance > 0 {
-                self.pace = (elapsed / 60) / self.distance
+                self.pace = (self.time / 60) / self.distance
             }
         }
     }

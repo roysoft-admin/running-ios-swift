@@ -99,7 +99,7 @@ struct RunView: View {
             }
         }
         .fullScreenCover(isPresented: $showFullScreenMap) {
-            FullScreenMapView()
+            FullScreenMapView(routes: [])
                 .transition(.opacity)
         }
         .fullScreenCover(isPresented: $navigateToProgress) {
@@ -235,42 +235,6 @@ struct RunModeSelectionView: View {
     }
 }
 
-struct FullScreenMapView: View {
-    @Environment(\.dismiss) var dismiss
-    @State private var isPresented = false
-    
-    var body: some View {
-        NavigationView {
-            ZStack {
-                // 동일한 맵을 전체 화면으로 표시 (기존 맵이 확대되는 느낌)
-                ActivityMapView(routes: [], isInteractive: true)
-                    .ignoresSafeArea()
-                    .opacity(isPresented ? 1 : 0)
-                    .scaleEffect(isPresented ? 1 : 0.95)
-                    .animation(.easeInOut(duration: 0.3), value: isPresented)
-            }
-            .navigationTitle("지도")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("닫기") {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isPresented = false
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            dismiss()
-                        }
-                    }
-                }
-            }
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isPresented = true
-                }
-            }
-        }
-    }
-}
 
 #Preview {
     RunView()

@@ -45,6 +45,9 @@ struct Achievement {
     let target: Double
     let isCompleted: Bool
     let rewardPoints: Int
+    let status: UserMissionStatus  // 서버 상태 추가
+    let term: MissionTerm  // 미션 기간 추가
+    let createdAt: Date  // 미션 시작일 추가
 }
 
 
