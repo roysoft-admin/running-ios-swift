@@ -131,50 +131,59 @@ class HomeViewModel: ObservableObject {
         
         guard let userUuid = currentUserUuid ?? currentUser?.uuid else { return }
         
-        activityService.getActivities(
+        // Activities와 UserPoints를 병렬로 로드
+        let activitiesPublisher = activityService.getActivities(
             startDate: startOfDay,
             endDate: endOfDay,
             userUuid: userUuid
         )
-        .receive(on: DispatchQueue.main)
-        .sink(
-            receiveCompletion: { [weak self] completion in
-                if case .failure(let error) = completion {
-                    self?.errorMessage = error.errorDescription
-                }
-            },
-            receiveValue: { [weak self] response in
-                guard let self = self else { return }
-                let allActivities = response.activities
-                
-                // 완료된 활동만 필터링 (distance > 0이고 endTime이 startTime보다 큰 활동)
-                let completedActivities = allActivities.filter { activity in
-                    activity.distance > 0 && activity.endTime > activity.startTime
-                }
-                
-                let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
-                let totalTime = completedActivities.reduce(0) { $0 + $1.time }
-                let totalCalories = completedActivities.reduce(0) { $0 + ($1.calories ?? 0) }
-                
-                // Activity의 pointId로 포인트 금액 계산
-                // pointId는 Int이지만, Point를 찾을 때는 id로 찾고 uuid는 API 호출 시 사용
-                let totalPoints = completedActivities.reduce(0) { sum, activity in
-                    if let pointId = activity.pointId,
-                       let point = self.points.first(where: { $0.id == pointId }) {
-                        return sum + point.point
-                    }
-                    return sum
-                }
-                
-                self.dailyStats = DailyStats(
-                    distance: totalDistance,
-                    time: totalTime,
-                    calories: totalCalories,
-                    points: totalPoints
-                )
-            }
+        
+        let userPointsPublisher = pointService.getUserPoints(
+            startDate: startOfDay,
+            endDate: endOfDay,
+            userUuid: userUuid,
+            pointType: .earned
         )
-        .store(in: &cancellables)
+        
+        Publishers.Zip(activitiesPublisher, userPointsPublisher)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = error.errorDescription
+                    }
+                },
+                receiveValue: { [weak self] (activitiesResponse, userPointsResponse) in
+                    guard let self = self else { return }
+                    let allActivities = activitiesResponse.activities
+                    
+                    // 완료된 활동만 필터링 (distance > 0이고 endTime이 있는 활동)
+                    let completedActivities = allActivities.filter { activity in
+                        activity.distance > 0 && activity.endTime != nil && activity.endTime! > activity.startTime
+                    }
+                    
+                    let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
+                    let totalTime = completedActivities.reduce(0) { $0 + $1.time }
+                    let totalCalories = completedActivities.reduce(0) { $0 + ($1.calories ?? 0) }
+                    
+                    // 오늘 획득한 모든 포인트 합산 (UserPoint의 pointAmount 사용)
+                    // userUuid로 필터링하여 현재 사용자의 포인트만 계산
+                    let totalPoints = userPointsResponse.userPoints
+                        .filter { userPoint in
+                            // point 객체의 type이 earned인 것만, 또는 pointAmount가 양수인 것만
+                            (userPoint.point?.type == .earned || userPoint.pointAmount > 0)
+                        }
+                        .reduce(0) { $0 + $1.pointAmount }
+                    
+                    self.dailyStats = DailyStats(
+                        distance: totalDistance,
+                        time: totalTime,
+                        calories: totalCalories,
+                        points: totalPoints
+                    )
+                }
+            )
+            .store(in: &cancellables)
     }
     
     func loadWeeklyStats() {
@@ -200,9 +209,9 @@ class HomeViewModel: ObservableObject {
             receiveValue: { [weak self] response in
                 let allActivities = response.activities
                 
-                // 완료된 활동만 필터링 (distance > 0이고 endTime이 startTime보다 큰 활동)
+                // 완료된 활동만 필터링 (distance > 0이고 endTime이 있는 활동)
                 let completedActivities = allActivities.filter { activity in
-                    activity.distance > 0 && activity.endTime > activity.startTime
+                    activity.distance > 0 && activity.endTime != nil && activity.endTime! > activity.startTime
                 }
                 
                 let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
@@ -258,9 +267,9 @@ class HomeViewModel: ObservableObject {
                 guard let self = self else { return }
                 let allActivities = response.activities
                 
-                // 완료된 활동만 필터링 (distance > 0이고 endTime이 startTime보다 큰 활동)
+                // 완료된 활동만 필터링 (distance > 0이고 endTime이 있는 활동)
                 let completedActivities = allActivities.filter { activity in
-                    activity.distance > 0 && activity.endTime > activity.startTime
+                    activity.distance > 0 && activity.endTime != nil && activity.endTime! > activity.startTime
                 }
                 
                 let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }

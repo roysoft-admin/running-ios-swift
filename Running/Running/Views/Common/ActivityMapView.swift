@@ -16,7 +16,7 @@ struct ActivityMapView: UIViewRepresentable {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
         mapView.isUserInteractionEnabled = isInteractive
-        mapView.showsUserLocation = false
+        mapView.showsUserLocation = true // 현재 위치 표시
         
         // Configure map style
         mapView.mapType = .standard
@@ -30,12 +30,21 @@ struct ActivityMapView: UIViewRepresentable {
         mapView.removeAnnotations(mapView.annotations)
         
         if routes.isEmpty {
-            // Default to Seoul if no routes
-            let region = MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780),
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            )
-            mapView.setRegion(region, animated: false)
+            // 현재 위치로 지도 이동 (사용자 위치가 있으면)
+            if let userLocation = mapView.userLocation.location {
+                let region = MKCoordinateRegion(
+                    center: userLocation.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005) // 더 확대
+                )
+                mapView.setRegion(region, animated: false)
+            } else {
+                // 위치가 없으면 서울로 기본값
+                let region = MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780),
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005) // 더 확대
+                )
+                mapView.setRegion(region, animated: false)
+            }
             return
         }
         

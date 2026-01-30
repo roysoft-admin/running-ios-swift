@@ -61,6 +61,16 @@ class ActivityService {
         )
     }
     
+    // MARK: - Get Active Activity (진행 중인 활동)
+    
+    func getActiveActivity(userUuid: String) -> AnyPublisher<ActivityResponseDTO, NetworkError> {
+        let endpoint = "/activities/active?user_uuid=\(userUuid)"
+        return apiService.request(
+            endpoint: endpoint,
+            method: .get
+        )
+    }
+    
     // MARK: - Create Activity (Start Running)
     
     func createActivity(

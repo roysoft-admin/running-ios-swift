@@ -19,15 +19,23 @@ class RunViewModel: ObservableObject {
     @Published var showStartModal: Bool = false
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
+    @Published var startSuccess: Bool? = nil // 러닝 시작 성공 여부 (nil: 초기값, true: 성공, false: 실패)
+    @Published var countdown: Int? = nil // 카운트다운 (5, 4, 3, 2, 1, nil = Go 표시)
+    
+    // Challenge info display
+    @Published var showChallengeInfo: Bool = false // 챌린지 정보 표시 화면
+    @Published var pendingChallenge: Challenge? // 대기 중인 챌린지 정보
     
     // Activity tracking
     @Published var currentActivityUuid: String?
     @Published var currentChallengeUuid: String?
+    @Published var currentChallenge: Challenge? // 현재 진행 중인 챌린지 정보
     @Published var completedActivityUuid: String? // 종료된 활동 UUID (리포트 상세 화면으로 이동용)
     @Published var routes: [ActivityRoute] = []
     
     private var timer: Timer?
     private var routeTimer: Timer?
+    private var countdownTimer: Timer?
     private var startTime: Date?
     private var activityStartTime: Date?
     private var pauseStartTime: Date? // 일시정지 시작 시간
@@ -43,10 +51,90 @@ class RunViewModel: ObservableObject {
     // TODO: Get current user UUID from app state
     var currentUserUuid: String?
     
-    func startRunning(type: RunningType) {
-        print("[RunViewModel] 🔵 러닝 시작 요청: type=\(type == .normal ? "일반" : "AI 챌린지")")
+    /// 챌린지 선택 시 호출: pending 챌린지 조회 또는 생성
+    func selectChallenge() {
+        print("[RunViewModel] 🔵 챌린지 선택 요청")
         isLoading = true
         errorMessage = nil
+        pendingChallenge = nil
+        
+        guard let userUuid = currentUserUuid else {
+            print("[RunViewModel] ❌ 사용자 UUID가 없습니다")
+            errorMessage = "사용자 정보를 찾을 수 없습니다"
+            isLoading = false
+            return
+        }
+        
+        print("[RunViewModel] ✅ 사용자 UUID: \(userUuid)")
+        print("[RunViewModel] 📤 대기 중인 챌린지 조회 시작")
+        
+        // 먼저 pending 챌린지 조회
+        challengeService.getPendingChallenge(userUuid: userUuid)
+            .map { (response: ChallengeResponseDTO) -> Challenge in
+                return response.challenge
+            }
+            .catch { [weak self] error -> AnyPublisher<Challenge, NetworkError> in
+                guard let self = self else {
+                    return Fail(error: error).eraseToAnyPublisher()
+                }
+                
+                // 404 에러면 챌린지가 없는 것이므로 새로 생성
+                if case .serverError(let code, _) = error, code == 404 {
+                    print("[RunViewModel] 📤 대기 중인 챌린지 없음, 새로 생성")
+                    return self.challengeService.createChallenge(userUuid: userUuid)
+                        .tryMap { (response: ChallengesResponseDTO) -> Challenge in
+                            guard let challenge = response.challenges.first else {
+                                let error = NSError(domain: "RunViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "챌린지 응답에 데이터가 없습니다"])
+                                throw NetworkError.decodingError(error)
+                            }
+                            return challenge
+                        }
+                        .mapError { error -> NetworkError in
+                            if let networkError = error as? NetworkError {
+                                return networkError
+                            }
+                            return NetworkError.unknown
+                        }
+                        .eraseToAnyPublisher()
+                }
+                
+                // 다른 에러면 그대로 전달
+                return Fail(error: error).eraseToAnyPublisher()
+            }
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoading = false
+                    if case .failure(let error) = completion {
+                        print("[RunViewModel] ❌ 챌린지 조회/생성 실패: \(error)")
+                        self?.errorMessage = error.errorDescription
+                    } else {
+                        print("[RunViewModel] ✅ 챌린지 조회/생성 성공")
+                    }
+                },
+                receiveValue: { [weak self] challenge in
+                    guard let self = self else { return }
+                    print("[RunViewModel] ✅ 챌린지 준비 완료: UUID=\(challenge.uuid)")
+                    self.pendingChallenge = challenge
+                    self.currentChallengeUuid = challenge.uuid
+                    self.currentChallenge = challenge // 현재 챌린지 정보 저장
+                    self.showChallengeInfo = true
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    /// 챌린지 정보 화면에서 시작 버튼 클릭 시 호출
+    func startChallengeRunning() {
+        guard let challengeUuid = currentChallengeUuid else {
+            errorMessage = "챌린지 정보가 없습니다"
+            return
+        }
+        
+        print("[RunViewModel] 🔵 챌린지 러닝 시작 요청")
+        isLoading = true
+        errorMessage = nil
+        startSuccess = nil
         
         let startTime = Date()
         self.startTime = startTime
@@ -59,56 +147,80 @@ class RunViewModel: ObservableObject {
             print("[RunViewModel] ❌ 사용자 UUID가 없습니다")
             errorMessage = "사용자 정보를 찾을 수 없습니다"
             isLoading = false
+            startSuccess = false
             return
         }
         
         print("[RunViewModel] ✅ 사용자 UUID: \(userUuid)")
-        print("[RunViewModel] 📤 활동 시작 API 호출: startTime=\(startTime)")
+        print("[RunViewModel] 📤 활동 생성 API 호출: challengeUuid=\(challengeUuid), startTime=\(startTime)")
+        
+        // Activity 생성 (챌린지 연결)
+        activityService.createActivity(
+            userUuid: userUuid,
+            challengeUuid: challengeUuid,
+            startTime: startTime
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                self?.isLoading = false
+                if case .failure(let error) = completion {
+                    print("[RunViewModel] ❌ 활동 시작 실패: \(error)")
+                    self?.errorMessage = error.errorDescription
+                    self?.startSuccess = false
+                    // 실패 시 타이머 중지 및 상태 리셋
+                    self?.timer?.invalidate()
+                    self?.routeTimer?.invalidate()
+                    self?.isRunning = false
+                    self?.resetRunningState()
+                } else {
+                    print("[RunViewModel] ✅ 활동 시작 성공")
+                }
+            },
+            receiveValue: { [weak self] response in
+                guard let self = self else { return }
+                print("[RunViewModel] ✅ 활동 생성 성공: UUID=\(response.activity.uuid)")
+                self.currentActivityUuid = response.activity.uuid
+                self.startSuccess = true
+                self.showChallengeInfo = false // 챌린지 정보 화면 닫기
+                // 성공 시 카운트다운 시작
+                self.startCountdown()
+            }
+        )
+        .store(in: &cancellables)
+    }
+    
+    func startRunning(type: RunningType) {
+        print("[RunViewModel] 🔵 러닝 시작 요청: type=\(type == .normal ? "일반" : "AI 챌린지")")
         
         if type == .aiChallenge {
-            // Create challenge first
-            print("[RunViewModel] 🔵 AI 챌린지 생성 시작")
-            challengeService.createChallenge(userUuid: userUuid)
-                .flatMap { [weak self] response -> AnyPublisher<ActivityResponseDTO, NetworkError> in
-                    guard let self = self else {
-                        return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
-                    }
-                    print("[RunViewModel] ✅ 챌린지 생성 성공: UUID=\(response.challenge.uuid)")
-                    self.currentChallengeUuid = response.challenge.uuid
-                    print("[RunViewModel] 📤 활동 생성 API 호출: challengeUuid=\(response.challenge.uuid)")
-                    return self.activityService.createActivity(
-                        userUuid: userUuid,
-                        challengeUuid: response.challenge.uuid,
-                        startTime: startTime
-                    )
-                }
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { [weak self] completion in
-                        self?.isLoading = false
-                        if case .failure(let error) = completion {
-                            print("[RunViewModel] ❌ 활동 시작 실패: \(error)")
-                            self?.errorMessage = error.errorDescription
-                        } else {
-                            print("[RunViewModel] ✅ 활동 시작 성공")
-                        }
-                    },
-                    receiveValue: { [weak self] response in
-                        guard let self = self else { return }
-                        print("[RunViewModel] ✅ 활동 생성 성공: UUID=\(response.activity.uuid)")
-                        self.currentActivityUuid = response.activity.uuid
-                        self.isRunning = true
-                        self.isPaused = false
-                        self.startTimer()
-                        self.startLocationTracking()
-                        self.startRouteTracking()
-                        print("[RunViewModel] ✅ 타이머 및 위치 추적 시작")
-                    }
-                )
-                .store(in: &cancellables)
-        } else {
-            // Normal run
-            print("[RunViewModel] 📤 일반 러닝 활동 생성 API 호출")
+            // 챌린지 선택 로직으로 변경
+            selectChallenge()
+            return
+        }
+        
+        // 일반 러닝은 기존 로직 유지
+        isLoading = true
+        errorMessage = nil
+        startSuccess = nil
+        
+        let startTime = Date()
+        self.startTime = startTime
+        self.activityStartTime = startTime
+        self.pauseStartTime = nil
+        self.totalPausedTime = 0
+        self.time = 0
+        
+        guard let userUuid = currentUserUuid else {
+            print("[RunViewModel] ❌ 사용자 UUID가 없습니다")
+            errorMessage = "사용자 정보를 찾을 수 없습니다"
+            isLoading = false
+            startSuccess = false
+            return
+        }
+        
+        print("[RunViewModel] ✅ 사용자 UUID: \(userUuid)")
+        print("[RunViewModel] 📤 일반 러닝 활동 생성 API 호출")
             activityService.createActivity(
                 userUuid: userUuid,
                 challengeUuid: nil,
@@ -121,6 +233,12 @@ class RunViewModel: ObservableObject {
                     if case .failure(let error) = completion {
                         print("[RunViewModel] ❌ 활동 시작 실패: \(error)")
                         self?.errorMessage = error.errorDescription
+                        self?.startSuccess = false
+                        // 실패 시 타이머 중지 및 상태 리셋
+                        self?.timer?.invalidate()
+                        self?.routeTimer?.invalidate()
+                        self?.isRunning = false
+                        self?.resetRunningState()
                     } else {
                         print("[RunViewModel] ✅ 활동 시작 성공")
                     }
@@ -129,19 +247,17 @@ class RunViewModel: ObservableObject {
                     guard let self = self else { return }
                     print("[RunViewModel] ✅ 활동 생성 성공: UUID=\(response.activity.uuid)")
                     self.currentActivityUuid = response.activity.uuid
-                    self.isRunning = true
-                    self.isPaused = false
-                    self.startTimer()
-                    self.startLocationTracking()
-                    self.startRouteTracking()
-                    print("[RunViewModel] ✅ 타이머 및 위치 추적 시작")
+                    self.startSuccess = true
+                    // 성공 시 카운트다운 시작
+                    self.startCountdown()
                 }
             )
             .store(in: &cancellables)
-        }
     }
     
     func pauseRunning() {
+        guard !isPaused else { return }
+        
         isPaused = true
         pauseStartTime = Date() // 일시정지 시작 시간 저장
         timer?.invalidate()
@@ -149,32 +265,73 @@ class RunViewModel: ObservableObject {
     }
     
     func resumeRunning() {
-        guard let pauseStart = pauseStartTime else { return }
+        guard isPaused, let pauseStart = pauseStartTime else { return }
         
         // 일시정지한 시간을 누적
         let pausedDuration = Date().timeIntervalSince(pauseStart)
         totalPausedTime += pausedDuration
         
-        isPaused = false
-        pauseStartTime = nil
-        startTimer()
-        startRouteTracking()
+        // 메인 스레드에서 상태 변경 및 타이머 재시작
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.isPaused = false
+            self.pauseStartTime = nil
+            self.startTimer()
+            self.startRouteTracking()
+        }
     }
     
     func stopRunning() {
-        guard let activityUuid = currentActivityUuid else { return }
+        // 이미 종료되었거나 실행 중이 아니면 무시
+        guard isRunning else { 
+            print("[RunViewModel] ⚠️ 이미 종료되었거나 실행 중이 아닙니다")
+            return 
+        }
         
-        isLoading = true
-        let endTime = Date()
+        print("[RunViewModel] 🔴 러닝 종료 요청 (isLoading: \(isLoading))")
         
-        // Stop timers
+        // 진행 중인 API 호출 취소 (필요한 경우)
+        cancellables.removeAll()
+        
+        // 일시정지 중이면 일시정지 시간 누적
+        if isPaused, let pauseStart = pauseStartTime {
+            let pausedDuration = Date().timeIntervalSince(pauseStart)
+            totalPausedTime += pausedDuration
+            pauseStartTime = nil
+        }
+        
+        // Stop timers immediately
         timer?.invalidate()
         routeTimer?.invalidate()
         timer = nil
         routeTimer = nil
         
+        // 최종 시간 계산
+        if let startTime = startTime {
+            let currentElapsed = Date().timeIntervalSince(startTime)
+            time = max(0, currentElapsed - totalPausedTime)
+        }
+        
+        // UI 상태를 즉시 변경 (사용자에게 즉시 피드백)
+        isRunning = false
+        isPaused = false
+        
+        // Activity UUID가 없으면 로컬에서만 종료 처리
+        guard let activityUuid = currentActivityUuid else {
+            print("[RunViewModel] ⚠️ Activity UUID가 없어 로컬에서만 종료 처리")
+            completedActivityUuid = nil
+            reset()
+            return
+        }
+        
+        // 서버 업데이트는 백그라운드에서 처리
+        isLoading = true
+        let endTime = Date()
+        
         // Calculate average speed
         let averageSpeed = distance > 0 && time > 0 ? (distance / (time / 3600)) : nil
+        
+        print("[RunViewModel] 🔴 서버에 활동 종료 전송: distance=\(distance), time=\(time), calories=\(calories)")
         
         // Update activity on server
         // Note: distance and end_time are calculated on backend, but we send current values
@@ -190,20 +347,43 @@ class RunViewModel: ObservableObject {
             receiveCompletion: { [weak self] completion in
                 self?.isLoading = false
                 if case .failure(let error) = completion {
+                    print("[RunViewModel] ❌ 활동 종료 실패: \(error)")
                     self?.errorMessage = error.errorDescription
+                    // 실패해도 로컬 상태는 이미 리셋됨
                 } else {
+                    print("[RunViewModel] ✅ 활동 종료 성공")
                     // 리포트 상세 화면으로 이동하기 위해 UUID 저장
                     self?.completedActivityUuid = activityUuid
                     self?.reset()
                 }
             },
             receiveValue: { [weak self] _ in
+                print("[RunViewModel] ✅ 활동 종료 성공")
                 // 리포트 상세 화면으로 이동하기 위해 UUID 저장
                 self?.completedActivityUuid = activityUuid
                 self?.reset()
             }
         )
         .store(in: &cancellables)
+    }
+    
+    private func resetRunningState() {
+        // 러닝 시작 실패 시 상태만 리셋 (completedActivityUuid는 유지)
+        isRunning = false
+        isPaused = false
+        distance = 0.00
+        time = 0
+        pace = 0
+        calories = 0
+        currentActivityUuid = nil
+        currentChallengeUuid = nil
+        routes = []
+        routeSeq = 0
+        lastLocation = nil
+        startTime = nil
+        activityStartTime = nil
+        pauseStartTime = nil
+        totalPausedTime = 0
     }
     
     private func reset() {
@@ -226,27 +406,55 @@ class RunViewModel: ObservableObject {
     }
     
     private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // 기존 타이머가 있으면 먼저 정리
+        timer?.invalidate()
+        
+        // 메인 스레드에서 타이머 생성 및 시작
+        let timerBlock: () -> Void = { [weak self] in
             guard let self = self, let startTime = self.startTime else { return }
             
             // 일시정지 시간을 제외한 실제 경과 시간 계산
             let currentElapsed = Date().timeIntervalSince(startTime)
-            let actualElapsed = currentElapsed - self.totalPausedTime
+            var actualElapsed = currentElapsed - self.totalPausedTime
             
             // 현재 일시정지 중이면 추가로 빼기
             if let pauseStart = self.pauseStartTime {
                 let currentPaused = Date().timeIntervalSince(pauseStart)
-                self.time = actualElapsed - currentPaused
-            } else {
-                self.time = actualElapsed
+                actualElapsed -= currentPaused
             }
+            
+            // 시간이 음수가 되지 않도록 보장
+            self.time = max(0, actualElapsed)
             
             // Calculate calories (approximate: 65 kcal per km)
             self.calories = Int(self.distance * 65)
             
             // Calculate pace
-            if self.distance > 0 {
+            if self.distance > 0 && self.time > 0 {
                 self.pace = (self.time / 60) / self.distance
+            } else {
+                self.pace = 0
+            }
+        }
+        
+        if Thread.isMainThread {
+            self.timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                timerBlock()
+            }
+            // 타이머를 메인 RunLoop에 명시적으로 추가 (다양한 모드에서도 작동하도록)
+            if let timer = self.timer {
+                RunLoop.main.add(timer, forMode: .common)
+            }
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                    timerBlock()
+                }
+                // 타이머를 메인 RunLoop에 명시적으로 추가 (다양한 모드에서도 작동하도록)
+                if let timer = self.timer {
+                    RunLoop.main.add(timer, forMode: .common)
+                }
             }
         }
     }
@@ -259,11 +467,17 @@ class RunViewModel: ObservableObject {
     }
     
     private func startRouteTracking() {
-        // Send route data every 2 seconds
-        routeTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            guard let self = self,
-                  let activityUuid = self.currentActivityUuid,
-                  !self.isPaused else { return }
+        // 기존 routeTimer가 있으면 먼저 정리
+        routeTimer?.invalidate()
+        
+        // 메인 스레드에서 routeTimer 생성 및 시작
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.routeTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+                guard let self = self,
+                      let activityUuid = self.currentActivityUuid,
+                      !self.isPaused else { return }
             
             // TODO: Get actual location from CLLocationManager
             // For now, simulate with last known location or default
@@ -324,10 +538,16 @@ class RunViewModel: ObservableObject {
                 )
                 self.distance += distanceDelta / 1000.0 // Convert to km
             }
+            }
+            
+            // routeTimer를 메인 RunLoop에 명시적으로 추가
+            if let routeTimer = self.routeTimer {
+                RunLoop.main.add(routeTimer, forMode: .common)
+            }
         }
     }
     
-    private func calculateDistance(lat1: Double, long1: Double, lat2: Double, long2: Double) -> Double {
+    func calculateDistance(lat1: Double, long1: Double, lat2: Double, long2: Double) -> Double {
         let location1 = CLLocation(latitude: lat1, longitude: long1)
         let location2 = CLLocation(latitude: lat2, longitude: long2)
         return location1.distance(from: location2)
@@ -349,6 +569,81 @@ class RunViewModel: ObservableObject {
         let minutes = Int(pace)
         let seconds = Int((pace - Double(minutes)) * 60)
         return String(format: "%d'%02d\"/km", minutes, seconds)
+    }
+    
+    // 시속 계산 (km/h)
+    var speed: Double {
+        guard time > 0 else { return 0 }
+        return (distance * 3600) / time
+    }
+    
+    func formatSpeed(_ speed: Double) -> String {
+        return String(format: "%.1f km/h", speed)
+    }
+    
+    // 카운트다운 시작
+    private func startCountdown() {
+        countdown = 5
+        countdownTimer?.invalidate()
+        
+        var currentCount = 5
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+            
+            currentCount -= 1
+            
+            if currentCount > 0 {
+                self.countdown = currentCount
+            } else if currentCount == 0 {
+                // Go 표시를 위해 -1로 설정 (nil과 구분)
+                self.countdown = -1
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // Go 표시 후 실제 러닝 시작 - 카운트다운이 끝난 시점을 시작 시간으로 설정
+                    let actualStartTime = Date()
+                    self.startTime = actualStartTime
+                    self.activityStartTime = actualStartTime
+                    self.time = 0
+                    self.totalPausedTime = 0
+                    
+                    self.countdown = nil
+                    self.isRunning = true
+                    self.isPaused = false
+                    self.startTimer()
+                    self.startLocationTracking()
+                    self.startRouteTracking()
+                    timer.invalidate()
+                    print("[RunViewModel] ✅ 타이머 및 경로 추적 시작 (실제 시작 시간: \(actualStartTime))")
+                }
+            }
+        }
+    }
+    
+    /// 종료되지 않은 activity의 러닝 상태 복원
+    func restoreRunningState(startTime: Date) {
+        print("[RunViewModel] 🔵 러닝 상태 복원 시작: startTime=\(startTime)")
+        
+        self.startTime = startTime
+        self.activityStartTime = startTime
+        self.pauseStartTime = nil
+        self.totalPausedTime = 0
+        
+        // 경과 시간 계산
+        let elapsed = Date().timeIntervalSince(startTime)
+        self.time = max(0, elapsed)
+        
+        // 러닝 상태 설정
+        self.isRunning = true
+        self.isPaused = false
+        
+        // 타이머 및 위치 추적 시작
+        startTimer()
+        startLocationTracking()
+        startRouteTracking()
+        
+        print("[RunViewModel] ✅ 러닝 상태 복원 완료: time=\(self.time)초")
     }
     
     enum RunningType {

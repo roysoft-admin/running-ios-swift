@@ -14,6 +14,7 @@ extension Color {
     static let emerald100 = Color(red: 0.863, green: 0.969, blue: 0.918) // #d1fae5
     
     static let blue500 = Color(red: 0.239, green: 0.620, blue: 0.878) // #3b9edf
+    static let blue100 = Color(red: 0.863, green: 0.925, blue: 0.980) // #dbeafe
     static let blue50 = Color(red: 0.953, green: 0.976, blue: 1.0) // #f0f9ff
     
     static let purple500 = Color(red: 0.659, green: 0.333, blue: 0.969) // #A855F7

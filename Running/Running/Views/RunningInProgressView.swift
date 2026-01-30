@@ -16,8 +16,20 @@ struct RunningInProgressView: View {
     @State private var completedActivityUuid: String?
     
     var body: some View {
+        let isChallenge = viewModel.currentChallenge != nil
+        
         ZStack {
-            Color.gray50.ignoresSafeArea()
+            // 챌린지인 경우 배경색 변경
+            if isChallenge {
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.blue50, Color.purple500.opacity(0.1)]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+            } else {
+                Color.gray50.ignoresSafeArea()
+            }
             
             VStack(spacing: 0) {
                 // Map Area
@@ -26,11 +38,20 @@ struct RunningInProgressView: View {
                         ActivityMapView(routes: viewModel.routes, isInteractive: true)
                             .ignoresSafeArea()
                     } else {
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.emerald100, Color.blue50]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                        // 챌린지인 경우 다른 그라데이션
+                        if isChallenge {
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.blue100, Color.purple500.opacity(0.2)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        } else {
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.emerald100, Color.blue50]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        }
                         
                         VStack(spacing: 16) {
                             Image(systemName: "map")
@@ -48,7 +69,7 @@ struct RunningInProgressView: View {
                             // Status Indicator
                             HStack(spacing: 8) {
                                 Circle()
-                                    .fill(viewModel.isPaused ? Color.orange500 : Color.emerald500)
+                                    .fill(viewModel.isPaused ? Color.orange500 : (isChallenge ? Color.blue500 : Color.emerald500))
                                     .frame(width: 12, height: 12)
                                     .opacity(viewModel.isPaused ? 1.0 : 0.7)
                                     .animation(
@@ -57,7 +78,7 @@ struct RunningInProgressView: View {
                                         value: viewModel.isPaused
                                     )
                                 
-                                Text(viewModel.isPaused ? "일시정지" : "러닝 중")
+                                Text(viewModel.isPaused ? "일시정지" : (isChallenge ? "챌린지 진행 중" : "러닝 중"))
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundColor(.gray900)
                             }
@@ -90,43 +111,112 @@ struct RunningInProgressView: View {
                 
                 // Stats & Controls
                 VStack(spacing: 24) {
-                    // Main Distance Display
-                    VStack(spacing: 8) {
-                        Text("거리")
-                            .font(.system(size: 14))
-                            .foregroundColor(.gray500)
-                        
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(String(format: "%.2f", viewModel.distance))
-                                .font(.system(size: 64, weight: .bold))
-                                .foregroundColor(Color.emerald500)
+                    // 챌린지 목표 정보 표시
+                    if let challenge = viewModel.currentChallenge {
+                        VStack(spacing: 12) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "target")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.blue500)
+                                
+                                Text("챌린지 목표")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.gray900)
+                            }
                             
-                            Text("km")
-                                .font(.system(size: 24))
-                                .foregroundColor(.gray500)
+                            HStack(spacing: 24) {
+                                if let targetDistance = challenge.targetDistance {
+                                    VStack(spacing: 4) {
+                                        Text("거리")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.gray600)
+                                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                            Text(String(format: "%.1f", targetDistance))
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundColor(.blue500)
+                                            Text("km")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.gray600)
+                                        }
+                                    }
+                                }
+                                
+                                if let targetTime = challenge.targetTime {
+                                    VStack(spacing: 4) {
+                                        Text("시간")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.gray600)
+                                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                            Text("\(targetTime)")
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundColor(.purple500)
+                                            Text("분")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.gray600)
+                                        }
+                                    }
+                                }
+                            }
                         }
+                        .padding(16)
+                        .background(Color.white.opacity(0.9))
+                        .cornerRadius(16)
+                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
                     }
-                    .padding(.top, 24)
                     
-                    // Secondary Stats
-                    HStack(spacing: 16) {
+                    // First Row: Time and Distance
+                    HStack(spacing: 24) {
                         VStack(spacing: 4) {
                             Text("시간")
-                                .font(.system(size: 10))
+                                .font(.system(size: 14))
                                 .foregroundColor(.gray500)
                             
                             Text(viewModel.formatTime(viewModel.time))
-                                .font(.system(size: 20, weight: .bold))
+                                .font(.system(size: 32, weight: .bold))
                                 .foregroundColor(.gray900)
                         }
                         .frame(maxWidth: .infinity)
                         
+                        VStack(spacing: 4) {
+                            Text("거리")
+                                .font(.system(size: 14))
+                                .foregroundColor(.gray500)
+                            
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text(String(format: "%.2f", viewModel.distance))
+                                    .font(.system(size: 32, weight: .bold))
+                                    .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
+                                
+                                Text("km")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.gray500)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .padding(.top, 24)
+                    
+                    // Second Row: Pace, Speed, Calories
+                    HStack(spacing: 16) {
                         VStack(spacing: 4) {
                             Text("페이스")
                                 .font(.system(size: 10))
                                 .foregroundColor(.gray500)
                             
                             Text(viewModel.formatPace(viewModel.pace))
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.gray900)
+                        }
+                        .frame(maxWidth: .infinity)
+                        
+                        VStack(spacing: 4) {
+                            Text("시속")
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray500)
+                            
+                            Text(viewModel.formatSpeed(viewModel.speed))
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.gray900)
                         }
@@ -203,6 +293,31 @@ struct RunningInProgressView: View {
                 .padding(24)
                 .background(Color.white)
                 .cornerRadius(24, corners: [.topLeft, .topRight])
+            }
+            
+            // 카운트다운 오버레이
+            if let countdown = viewModel.countdown {
+                if countdown > 0 {
+                    // 숫자 표시 (5, 4, 3, 2, 1)
+                    ZStack {
+                        Color.black.opacity(0.7)
+                            .ignoresSafeArea()
+                        
+                        Text("\(countdown)")
+                            .font(.system(size: 120, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                } else if countdown == -1 {
+                    // Go 표시
+                    ZStack {
+                        Color.black.opacity(0.7)
+                            .ignoresSafeArea()
+                        
+                        Text("Go!")
+                            .font(.system(size: 120, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
             }
         }
         .onAppear {

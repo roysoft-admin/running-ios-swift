@@ -10,55 +10,20 @@ import SwiftUI
 struct RunView: View {
     @StateObject private var viewModel = RunViewModel()
     @State private var showStartModal = false
-    @State private var showFullScreenMap = false
     @State private var navigateToProgress = false
     @EnvironmentObject var appState: AppState
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Map Area
-                ZStack {
-                    // 실제 맵 표시
-                    ActivityMapView(routes: [], isInteractive: false)
-                        .frame(height: 300)
-                        .clipped()
-                    
-                    VStack {
-                        HStack {
-                            Spacer()
-                            
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    showFullScreenMap = true
-                                }
-                            }) {
-                                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.gray700)
-                                    .frame(width: 44, height: 44)
-                                    .background(Color.white)
-                                    .clipShape(Circle())
-                                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-                            }
-                            .padding()
-                        }
-                        
-                        Spacer()
-                    }
-                }
-                .frame(height: 300) // Map 영역 높이 고정
+        ZStack {
+            // Map Area - 전체 화면
+            ActivityMapView(routes: [], isInteractive: false)
+                .ignoresSafeArea()
+            
+            // Stats Area - 하단에 고정
+            VStack {
+                Spacer()
                 
-                // Stats Area
                 VStack(spacing: 24) {
-                    // Stats Grid
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        StatBox(title: "거리", value: "0.00", unit: "km")
-                        StatBox(title: "시간", value: "00:00", unit: "")
-                        StatBox(title: "페이스", value: "0'00\"", unit: "/km")
-                        StatBox(title: "칼로리", value: "0", unit: "kcal")
-                    }
-                    
                     // Start Button
                     Button(action: {
                         showStartModal = true
@@ -98,15 +63,23 @@ struct RunView: View {
                 navigateToProgress = true
             }
         }
-        .fullScreenCover(isPresented: $showFullScreenMap) {
-            FullScreenMapView(routes: [])
-                .transition(.opacity)
-        }
         .fullScreenCover(isPresented: $navigateToProgress) {
             RunningInProgressView(viewModel: viewModel)
         }
+        .fullScreenCover(isPresented: $viewModel.showChallengeInfo) {
+            ChallengeInfoView(viewModel: viewModel)
+        }
         .loadingOverlay(isLoading: $viewModel.isLoading)
         .errorAlert(errorMessage: $viewModel.errorMessage)
+        .onChange(of: viewModel.startSuccess) { success in
+            // 챌린지 시작 성공 시 러닝 화면으로 이동
+            if let success = success, success {
+                // 챌린지 정보 화면이 닫힌 후 러닝 화면 표시
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    navigateToProgress = true
+                }
+            }
+        }
         .onAppear {
             // AppState의 사용자 정보를 ViewModel에 전달
             viewModel.currentUserUuid = appState.currentUser?.uuid
@@ -160,11 +133,6 @@ struct RunModeSelectionView: View {
                 VStack(spacing: 12) {
                     Button(action: {
                         viewModel.startRunning(type: .normal)
-                        dismiss()
-                        // 약간의 딜레이 후 러닝 화면 표시
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            onStartRunning()
-                        }
                     }) {
                         Text("일반 러닝")
                             .font(.system(size: 16, weight: .semibold))
@@ -174,14 +142,10 @@ struct RunModeSelectionView: View {
                             .background(Color.emerald500)
                             .cornerRadius(16)
                     }
+                    .disabled(viewModel.isLoading)
                     
                     Button(action: {
                         viewModel.startRunning(type: .aiChallenge)
-                        dismiss()
-                        // 약간의 딜레이 후 러닝 화면 표시
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            onStartRunning()
-                        }
                     }) {
                         ZStack {
                             Text("AI 챌린지 러닝")
@@ -191,7 +155,7 @@ struct RunModeSelectionView: View {
                                 .frame(height: 56)
                                 .background(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue500, Color.purple]),
+                                        gradient: Gradient(colors: [Color.blue500, Color.purple500]),
                                         startPoint: .leading,
                                         endPoint: .trailing
                                     )
@@ -229,6 +193,24 @@ struct RunModeSelectionView: View {
                     Button("닫기") {
                         dismiss()
                     }
+                }
+            }
+            .loadingOverlay(isLoading: $viewModel.isLoading)
+            .errorAlert(errorMessage: $viewModel.errorMessage)
+            .onChange(of: viewModel.startSuccess) { success in
+                // 성공 시에만 화면 이동 (nil이 아니고 true일 때만)
+                if let success = success, success {
+                    dismiss()
+                    // 약간의 딜레이 후 러닝 화면 표시
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        onStartRunning()
+                    }
+                }
+            }
+            .onChange(of: viewModel.showChallengeInfo) { showChallengeInfo in
+                // 챌린지 정보 화면이 표시되면 현재 모달 닫기
+                if showChallengeInfo {
+                    dismiss()
                 }
             }
         }

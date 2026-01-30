@@ -177,6 +177,7 @@ struct HomeView: View {
             if appState.currentUser == nil {
                 viewModel.loadUser()
             } else {
+                // 화면이 나타날 때마다 데이터 새로고침
                 viewModel.loadData()
             }
         }

@@ -160,6 +160,8 @@ struct ReportRow: View {
     let viewModel: ReportViewModel
     
     var body: some View {
+        let isChallenge = record.challengeId != nil
+        
         VStack(spacing: 12) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -169,18 +171,18 @@ struct ReportRow: View {
                     
                     Text("\(String(format: "%.1f", record.distance))km")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.gray900)
+                        .foregroundColor(isChallenge ? Color.blue500 : .gray900)
                 }
                 
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 8) {
-                    Text(record.type.rawValue)
+                    Text(isChallenge ? "AI 챌린지" : record.type.rawValue)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color.emerald500)
+                        .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.emerald50)
+                        .background(isChallenge ? Color.blue50 : Color.emerald50)
                         .cornerRadius(12)
                     
                     if record.points > 0 {
@@ -229,8 +231,24 @@ struct ReportRow: View {
             }
         }
         .padding(16)
-        .background(Color.white)
+        .background(
+            Group {
+                if isChallenge {
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.blue50.opacity(0.5), Color.purple500.opacity(0.1)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                } else {
+                    Color.white
+                }
+            }
+        )
         .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(isChallenge ? Color.blue500.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 }
 
@@ -248,6 +266,8 @@ struct ReportDetailView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let record = activity {
+                let isChallenge = record.challengeId != nil
+                
                 ScrollView {
                     VStack(spacing: 24) {
                         // Record Summary
@@ -258,19 +278,31 @@ struct ReportDetailView: View {
                             
                             Text("\(String(format: "%.1f", record.distance))km")
                                 .font(.system(size: 48, weight: .bold))
-                                .foregroundColor(Color.emerald500)
+                                .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
                             
-                            Text(record.type.rawValue)
+                            Text(isChallenge ? "AI 챌린지" : record.type.rawValue)
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(Color.emerald500)
+                                .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
-                                .background(Color.emerald50)
+                                .background(isChallenge ? Color.blue50 : Color.emerald50)
                                 .cornerRadius(16)
                         }
                         .padding(24)
                         .frame(maxWidth: .infinity)
-                        .background(Color.white)
+                        .background(
+                            Group {
+                                if isChallenge {
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue50, Color.purple500.opacity(0.05)]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                } else {
+                                    Color.white
+                                }
+                            }
+                        )
                         .cornerRadius(16)
                         
                         // Stats Grid
@@ -327,7 +359,19 @@ struct ReportDetailView: View {
                     }
                     .padding(.vertical, 16)
                 }
-                .background(Color.gray50)
+                .background(
+                    Group {
+                        if isChallenge {
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.blue50.opacity(0.3), Color.purple500.opacity(0.1)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        } else {
+                            Color.gray50
+                        }
+                    }
+                )
             } else {
                 VStack {
                     Image(systemName: "exclamationmark.triangle")

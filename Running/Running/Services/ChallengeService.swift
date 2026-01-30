@@ -16,8 +16,11 @@ class ChallengeService {
     private init() {}
     
     // MARK: - Create Challenge
-    
-    func createChallenge(userUuid: String) -> AnyPublisher<ChallengeResponseDTO, NetworkError> {
+    //
+    // 백엔드 POST /challenges 응답 형식:
+    // { "challenges": [ { ... Challenge ... } ] }
+    // 이 형식에 맞추어 ChallengesResponseDTO를 사용한다.
+    func createChallenge(userUuid: String) -> AnyPublisher<ChallengesResponseDTO, NetworkError> {
         let dto = CreateChallengeDTO(userUuid: userUuid)
         
         return apiService.request(
@@ -57,6 +60,19 @@ class ChallengeService {
             let queryString = queryItems.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: "&")
             endpoint += "?\(queryString)"
         }
+        
+        return apiService.request(
+            endpoint: endpoint,
+            method: .get
+        )
+    }
+    
+    // MARK: - Get Pending Challenge
+    
+    /// 오늘 생성된 액티비티에 연결되지 않은 챌린지 조회
+    /// 없으면 404 에러 반환
+    func getPendingChallenge(userUuid: String) -> AnyPublisher<ChallengeResponseDTO, NetworkError> {
+        let endpoint = "/challenges/pending?user_uuid=\(userUuid)"
         
         return apiService.request(
             endpoint: endpoint,

@@ -25,10 +25,11 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
     var challengeId: Int?
     var pointId: Int?
     let startTime: Date
-    let endTime: Date
+    let endTime: Date? // 종료되지 않은 activity는 nil
     var averageSpeed: Double?
     var challengeStatus: ChallengeStatus?
     var routes: [ActivityRoute]?
+    var challenge: Challenge? // 챌린지 정보 (백엔드에서 leftJoinAndSelect로 함께 조회)
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -45,6 +46,7 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
         case averageSpeed  // 백엔드가 camelCase로 응답
         case challengeStatus  // 백엔드가 camelCase로 응답
         case routes
+        case challenge
     }
     
     // Default initializer for manual creation
@@ -59,7 +61,7 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
         challengeId: Int? = nil,
         pointId: Int? = nil,
         startTime: Date,
-        endTime: Date,
+        endTime: Date? = nil,
         averageSpeed: Double? = nil,
         challengeStatus: ChallengeStatus? = nil,
         routes: [ActivityRoute]? = nil
@@ -101,7 +103,7 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
         challengeId = try container.decodeIfPresent(Int.self, forKey: .challengeId)
         pointId = try container.decodeIfPresent(Int.self, forKey: .pointId)
         startTime = try container.decode(Date.self, forKey: .startTime)
-        endTime = try container.decode(Date.self, forKey: .endTime)
+        endTime = try container.decodeIfPresent(Date.self, forKey: .endTime) // 종료되지 않은 activity는 nil
         
         // Handle averageSpeed as String or Double
         if let averageSpeedString = try? container.decode(String.self, forKey: .averageSpeed) {
@@ -112,10 +114,15 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
         
         challengeStatus = try container.decodeIfPresent(ChallengeStatus.self, forKey: .challengeStatus)
         routes = try container.decodeIfPresent([ActivityRoute].self, forKey: .routes)
+        challenge = try container.decodeIfPresent(Challenge.self, forKey: .challenge)
     }
     
     // Computed properties for UI
     var time: TimeInterval {
+        guard let endTime = endTime else {
+            // 종료되지 않은 activity는 현재 시간 기준으로 계산
+            return Date().timeIntervalSince(startTime)
+        }
         return endTime.timeIntervalSince(startTime)
     }
     

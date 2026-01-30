@@ -32,12 +32,14 @@ struct UpdateChallengeDTO: Codable {
     var aiResult: String?
     var targetDistance: Double?
     var targetTime: Int?
+    var description: String?
     
     enum CodingKeys: String, CodingKey {
         case aiInputPrompt = "ai_input_prompt"
         case aiResult = "ai_result"
         case targetDistance = "target_distance"
         case targetTime = "target_time"
+        case description
     }
 }
 
