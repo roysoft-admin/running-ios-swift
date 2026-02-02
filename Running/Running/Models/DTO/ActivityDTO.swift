@@ -62,12 +62,33 @@ struct UpdateActivityDTO: Codable {
     var endTime: String?       // 백엔드: end_time (ISO 8601 문자열, optional)
     var averageSpeed: Double?  // 백엔드: average_speed (optional)
     var calories: Int?         // 백엔드: calories (optional)
+    var startTime: String?     // 백엔드: start_time (ISO 8601 문자열, optional) - 카운트다운 종료 후 실제 시작 시간
     
     enum CodingKeys: String, CodingKey {
         case distance
         case endTime = "end_time"
         case averageSpeed = "average_speed"
         case calories
+        case startTime = "start_time"
     }
 }
 
+// 백엔드: POST /activity-pauses - 일시정지 시작 시 호출
+struct CreateActivityPauseDTO: Codable {
+    let activityUuid: String     // 백엔드: activity_uuid
+    let pauseStartedAt: String  // 백엔드: pause_started_at (ISO 8601 문자열)
+    
+    enum CodingKeys: String, CodingKey {
+        case activityUuid = "activity_uuid"
+        case pauseStartedAt = "pause_started_at"
+    }
+}
+
+// 백엔드: PUT /activity-pauses/:id - 일시정지 종료 시 호출
+struct UpdateActivityPauseDTO: Codable {
+    let pauseEndedAt: String  // 백엔드: pause_ended_at (ISO 8601 문자열)
+    
+    enum CodingKeys: String, CodingKey {
+        case pauseEndedAt = "pause_ended_at"
+    }
+}

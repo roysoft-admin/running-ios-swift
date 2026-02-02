@@ -29,6 +29,7 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
     var averageSpeed: Double?
     var challengeStatus: ChallengeStatus?
     var routes: [ActivityRoute]?
+    var pauses: [ActivityPause]? // 일시정지 정보 (백엔드에서 leftJoinAndSelect로 함께 조회)
     var challenge: Challenge? // 챌린지 정보 (백엔드에서 leftJoinAndSelect로 함께 조회)
     
     enum CodingKeys: String, CodingKey {
@@ -46,6 +47,7 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
         case averageSpeed  // 백엔드가 camelCase로 응답
         case challengeStatus  // 백엔드가 camelCase로 응답
         case routes
+        case pauses
         case challenge
     }
     
@@ -64,7 +66,8 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
         endTime: Date? = nil,
         averageSpeed: Double? = nil,
         challengeStatus: ChallengeStatus? = nil,
-        routes: [ActivityRoute]? = nil
+        routes: [ActivityRoute]? = nil,
+        pauses: [ActivityPause]? = nil
     ) {
         self.id = id
         self.uuid = uuid
@@ -80,6 +83,7 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
         self.averageSpeed = averageSpeed
         self.challengeStatus = challengeStatus
         self.routes = routes
+        self.pauses = pauses
     }
     
     // Custom init to handle potential type mismatches from backend
@@ -114,6 +118,7 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
         
         challengeStatus = try container.decodeIfPresent(ChallengeStatus.self, forKey: .challengeStatus)
         routes = try container.decodeIfPresent([ActivityRoute].self, forKey: .routes)
+        pauses = try container.decodeIfPresent([ActivityPause].self, forKey: .pauses)
         challenge = try container.decodeIfPresent(Challenge.self, forKey: .challenge)
     }
     
@@ -124,6 +129,22 @@ struct Activity: BaseEntityProtocol, Codable, Identifiable {
             return Date().timeIntervalSince(startTime)
         }
         return endTime.timeIntervalSince(startTime)
+    }
+    
+    // 실제 러닝 시간 (일시정지 시간 제외)
+    var actualRunningTime: TimeInterval {
+        let totalTime = time
+        guard let pauses = pauses else { return totalTime }
+        
+        let totalPausedTime = pauses.reduce(0) { sum, pause in
+            if let pauseEndedAt = pause.pauseEndedAt {
+                return sum + pauseEndedAt.timeIntervalSince(pause.pauseStartedAt)
+            }
+            // 아직 종료되지 않은 일시정지 (현재 시간 기준)
+            return sum + Date().timeIntervalSince(pause.pauseStartedAt)
+        }
+        
+        return max(0, totalTime - totalPausedTime)
     }
     
     var pace: Double {

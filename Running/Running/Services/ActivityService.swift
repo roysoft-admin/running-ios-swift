@@ -115,7 +115,8 @@ class ActivityService {
         distance: Double? = nil,
         endTime: Date? = nil,
         averageSpeed: Double? = nil,
-        calories: Int? = nil
+        calories: Int? = nil,
+        startTime: Date? = nil
     ) -> AnyPublisher<ActivityResponseDTO, NetworkError> {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -125,6 +126,7 @@ class ActivityService {
         dto.endTime = endTime != nil ? formatter.string(from: endTime!) : nil
         dto.averageSpeed = averageSpeed
         dto.calories = calories
+        dto.startTime = startTime != nil ? formatter.string(from: startTime!) : nil
         
         return apiService.request(
             endpoint: "/activities/\(activityUuid)",
@@ -162,6 +164,47 @@ class ActivityService {
             body: dto
         )
     }
+    
+    // MARK: - Create Activity Pause
+    
+    func createActivityPause(
+        activityUuid: String,
+        pauseStartedAt: Date
+    ) -> AnyPublisher<ActivityPauseResponseDTO, NetworkError> {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        let dto = CreateActivityPauseDTO(
+            activityUuid: activityUuid,
+            pauseStartedAt: formatter.string(from: pauseStartedAt)
+        )
+        
+        return apiService.request(
+            endpoint: "/activity-pauses",
+            method: .post,
+            body: dto
+        )
+    }
+    
+    // MARK: - Update Activity Pause
+    
+    func updateActivityPause(
+        pauseUuid: String,
+        pauseEndedAt: Date
+    ) -> AnyPublisher<ActivityPauseResponseDTO, NetworkError> {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        let dto = UpdateActivityPauseDTO(
+            pauseEndedAt: formatter.string(from: pauseEndedAt)
+        )
+        
+        return apiService.request(
+            endpoint: "/activity-pauses/\(pauseUuid)",
+            method: .put,
+            body: dto
+        )
+    }
 }
 
 struct ActivityRouteResponseDTO: Codable {
@@ -172,3 +215,10 @@ struct ActivityRouteResponseDTO: Codable {
     }
 }
 
+struct ActivityPauseResponseDTO: Codable {
+    let activityPause: ActivityPause
+    
+    enum CodingKeys: String, CodingKey {
+        case activityPause = "activity-pause"
+    }
+}

@@ -16,11 +16,12 @@ class RunViewModel: ObservableObject {
     @Published var calories: Int = 0
     @Published var isRunning: Bool = false
     @Published var isPaused: Bool = false
+    @Published var pausedTime: TimeInterval = 0 // 일시정지 시간 (0초부터 카운트)
     @Published var showStartModal: Bool = false
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
     @Published var startSuccess: Bool? = nil // 러닝 시작 성공 여부 (nil: 초기값, true: 성공, false: 실패)
-    @Published var countdown: Int? = nil // 카운트다운 (5, 4, 3, 2, 1, nil = Go 표시)
+    @Published var countdown: Int? = nil // 카운트다운 (3, 2, 1, nil = Go 표시)
     
     // Challenge info display
     @Published var showChallengeInfo: Bool = false // 챌린지 정보 표시 화면
@@ -36,13 +37,23 @@ class RunViewModel: ObservableObject {
     private var timer: Timer?
     private var routeTimer: Timer?
     private var countdownTimer: Timer?
+    private var pauseTimer: Timer? // 일시정지 시간 카운트용 타이머
     private var startTime: Date?
     private var activityStartTime: Date?
     private var pauseStartTime: Date? // 일시정지 시작 시간
     private var totalPausedTime: TimeInterval = 0 // 누적된 일시정지 시간
+    private var currentPauseUuid: String? // 현재 일시정지 중인 pause의 UUID
     private var locationManager: CLLocationManager?
     private var lastLocation: CLLocation?
     private var routeSeq: Int = 0
+    
+    // 최근 30초간의 위치 데이터 (시속 계산용)
+    private struct LocationWithTime {
+        let timestamp: Date
+        let lat: Double
+        let long: Double
+    }
+    private var recentLocations: [LocationWithTime] = []
     
     private let activityService = ActivityService.shared
     private let challengeService = ChallengeService.shared
@@ -257,25 +268,95 @@ class RunViewModel: ObservableObject {
     
     func pauseRunning() {
         guard !isPaused else { return }
+        guard let activityUuid = currentActivityUuid else {
+            print("[RunViewModel] ⚠️ Activity UUID가 없어 일시정지 API를 호출할 수 없습니다")
+            return
+        }
         
         isPaused = true
-        pauseStartTime = Date() // 일시정지 시작 시간 저장
+        let pauseStart = Date()
+        pauseStartTime = pauseStart
+        pausedTime = 0 // 일시정지 시간 0초부터 시작
         timer?.invalidate()
         routeTimer?.invalidate()
+        
+        // 일시정지 시간 카운트 타이머 시작
+        startPauseTimer()
+        
+        // 일시정지 생성 API 호출
+        activityService.createActivityPause(
+            activityUuid: activityUuid,
+            pauseStartedAt: pauseStart
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                if case .failure(let error) = completion {
+                    print("[RunViewModel] ❌ 일시정지 생성 실패: \(error)")
+                    // 에러가 발생해도 일시정지 상태는 유지
+                }
+            },
+            receiveValue: { [weak self] response in
+                guard let self = self else { return }
+                self.currentPauseUuid = response.activityPause.uuid
+                print("[RunViewModel] ✅ 일시정지 생성 성공: UUID=\(response.activityPause.uuid)")
+            }
+        )
+        .store(in: &cancellables)
     }
     
     func resumeRunning() {
         guard isPaused, let pauseStart = pauseStartTime else { return }
+        guard let pauseUuid = currentPauseUuid else {
+            print("[RunViewModel] ⚠️ Pause UUID가 없어 일시정지 종료 API를 호출할 수 없습니다")
+            // API 호출 없이 로컬에서만 처리
+            let pausedDuration = Date().timeIntervalSince(pauseStart)
+            totalPausedTime += pausedDuration
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.isPaused = false
+                self.pauseStartTime = nil
+                self.startTimer()
+                self.startRouteTracking()
+            }
+            return
+        }
         
         // 일시정지한 시간을 누적
         let pausedDuration = Date().timeIntervalSince(pauseStart)
         totalPausedTime += pausedDuration
+        
+        let pauseEnd = Date()
+        
+        // 일시정지 종료 API 호출
+        activityService.updateActivityPause(
+            pauseUuid: pauseUuid,
+            pauseEndedAt: pauseEnd
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                if case .failure(let error) = completion {
+                    print("[RunViewModel] ❌ 일시정지 종료 실패: \(error)")
+                    // 에러가 발생해도 재개는 진행
+                }
+            },
+            receiveValue: { [weak self] _ in
+                guard let self = self else { return }
+                print("[RunViewModel] ✅ 일시정지 종료 성공")
+            }
+        )
+        .store(in: &cancellables)
         
         // 메인 스레드에서 상태 변경 및 타이머 재시작
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.isPaused = false
             self.pauseStartTime = nil
+            self.currentPauseUuid = nil
+            self.pausedTime = 0 // 일시정지 시간 리셋
+            self.pauseTimer?.invalidate() // 일시정지 타이머 정지
+            self.pauseTimer = nil
             self.startTimer()
             self.startRouteTracking()
         }
@@ -293,18 +374,49 @@ class RunViewModel: ObservableObject {
         // 진행 중인 API 호출 취소 (필요한 경우)
         cancellables.removeAll()
         
-        // 일시정지 중이면 일시정지 시간 누적
-        if isPaused, let pauseStart = pauseStartTime {
-            let pausedDuration = Date().timeIntervalSince(pauseStart)
+        // 일시정지 중이면 일시정지 종료 API 호출
+        if isPaused {
+            let pausedDuration = Date().timeIntervalSince(pauseStartTime ?? Date())
             totalPausedTime += pausedDuration
+            
+            if let pauseUuid = currentPauseUuid {
+                let pauseEnd = Date()
+                activityService.updateActivityPause(
+                    pauseUuid: pauseUuid,
+                    pauseEndedAt: pauseEnd
+                )
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { [weak self] completion in
+                        if case .failure(let error) = completion {
+                            print("[RunViewModel] ❌ 일시정지 종료 실패 (stopRunning): \(error)")
+                            // 에러가 발생해도 종료는 진행
+                        } else {
+                            print("[RunViewModel] ✅ 일시정지 종료 성공 (stopRunning)")
+                        }
+                    },
+                    receiveValue: { [weak self] _ in
+                        print("[RunViewModel] ✅ 일시정지 종료 성공 (stopRunning)")
+                    }
+                )
+                .store(in: &cancellables)
+            }
+            
+            isPaused = false
             pauseStartTime = nil
+            pausedTime = 0
+            pauseTimer?.invalidate()
+            pauseTimer = nil
+            currentPauseUuid = nil
         }
         
         // Stop timers immediately
         timer?.invalidate()
         routeTimer?.invalidate()
+        pauseTimer?.invalidate()
         timer = nil
         routeTimer = nil
+        pauseTimer = nil
         
         // 최종 시간 계산
         if let startTime = startTime {
@@ -314,7 +426,6 @@ class RunViewModel: ObservableObject {
         
         // UI 상태를 즉시 변경 (사용자에게 즉시 피드백)
         isRunning = false
-        isPaused = false
         
         // Activity UUID가 없으면 로컬에서만 종료 처리
         guard let activityUuid = currentActivityUuid else {
@@ -384,6 +495,10 @@ class RunViewModel: ObservableObject {
         activityStartTime = nil
         pauseStartTime = nil
         totalPausedTime = 0
+        currentPauseUuid = nil
+        pausedTime = 0
+        pauseTimer?.invalidate()
+        pauseTimer = nil
     }
     
     private func reset() {
@@ -403,6 +518,7 @@ class RunViewModel: ObservableObject {
         activityStartTime = nil
         pauseStartTime = nil
         totalPausedTime = 0
+        currentPauseUuid = nil
     }
     
     private func startTimer() {
@@ -485,6 +601,14 @@ class RunViewModel: ObservableObject {
             let long = self.lastLocation?.coordinate.longitude ?? 126.9780
             let speed = self.lastLocation?.speed ?? nil
             let altitude = self.lastLocation?.altitude ?? nil
+            
+            // 최근 30초간의 위치 데이터 저장 (시속 계산용)
+            let now = Date()
+            self.recentLocations.append(LocationWithTime(timestamp: now, lat: lat, long: long))
+            // 30초 이전 데이터 제거
+            self.recentLocations.removeAll { location in
+                now.timeIntervalSince(location.timestamp) > 30.0
+            }
             
             self.routeSeq += 1
             
@@ -571,22 +695,76 @@ class RunViewModel: ObservableObject {
         return String(format: "%d'%02d\"/km", minutes, seconds)
     }
     
-    // 시속 계산 (km/h)
+    // 시속 계산 (km/h) - 최근 30초간의 이동 거리 기준
     var speed: Double {
-        guard time > 0 else { return 0 }
-        return (distance * 3600) / time
+        guard recentLocations.count >= 2 else { return 0 }
+        
+        let now = Date()
+        // 30초 이전 위치 찾기
+        guard let oldestLocation = recentLocations.first(where: { location in
+            now.timeIntervalSince(location.timestamp) <= 30.0
+        }) else {
+            // 30초 이전 데이터가 없으면 가장 오래된 데이터 사용
+            guard let oldest = recentLocations.first,
+                  let newest = recentLocations.last else { return 0 }
+            
+            let timeDiff = newest.timestamp.timeIntervalSince(oldest.timestamp)
+            guard timeDiff > 0 else { return 0 }
+            
+            let distance = calculateDistance(
+                lat1: oldest.lat,
+                long1: oldest.long,
+                lat2: newest.lat,
+                long2: newest.long
+            ) / 1000.0 // km로 변환
+            
+            return (distance * 3600) / timeDiff
+        }
+        
+        // 가장 최근 위치
+        guard let newestLocation = recentLocations.last else { return 0 }
+        
+        let timeDiff = newestLocation.timestamp.timeIntervalSince(oldestLocation.timestamp)
+        guard timeDiff > 0 else { return 0 }
+        
+        let distance = calculateDistance(
+            lat1: oldestLocation.lat,
+            long1: oldestLocation.long,
+            lat2: newestLocation.lat,
+            long2: newestLocation.long
+        ) / 1000.0 // km로 변환
+        
+        return (distance * 3600) / timeDiff
     }
     
     func formatSpeed(_ speed: Double) -> String {
         return String(format: "%.1f km/h", speed)
     }
     
+    // 일시정지 시간 카운트 타이머 시작
+    private func startPauseTimer() {
+        pauseTimer?.invalidate()
+        pausedTime = 0
+        
+        pauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isPaused else {
+                self?.pauseTimer?.invalidate()
+                return
+            }
+            self.pausedTime += 1.0
+        }
+        
+        if let pauseTimer = pauseTimer {
+            RunLoop.main.add(pauseTimer, forMode: .common)
+        }
+    }
+    
     // 카운트다운 시작
     private func startCountdown() {
-        countdown = 5
+        countdown = 3
         countdownTimer?.invalidate()
         
-        var currentCount = 5
+        var currentCount = 3
         countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
             guard let self = self else {
                 timer.invalidate()
@@ -607,6 +785,30 @@ class RunViewModel: ObservableObject {
                     self.activityStartTime = actualStartTime
                     self.time = 0
                     self.totalPausedTime = 0
+                    
+                    // 백엔드의 start_time을 카운트다운 종료 시점으로 업데이트
+                    if let activityUuid = self.currentActivityUuid {
+                        self.activityService.updateActivity(
+                            activityUuid: activityUuid,
+                            distance: nil,
+                            endTime: nil,
+                            averageSpeed: nil,
+                            calories: nil,
+                            startTime: actualStartTime
+                        )
+                        .receive(on: DispatchQueue.main)
+                        .sink(
+                            receiveCompletion: { completion in
+                                if case .failure(let error) = completion {
+                                    print("[RunViewModel] ⚠️ start_time 업데이트 실패: \(error)")
+                                } else {
+                                    print("[RunViewModel] ✅ start_time 업데이트 성공")
+                                }
+                            },
+                            receiveValue: { _ in }
+                        )
+                        .store(in: &self.cancellables)
+                    }
                     
                     self.countdown = nil
                     self.isRunning = true
