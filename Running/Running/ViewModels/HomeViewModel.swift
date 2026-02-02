@@ -157,14 +157,26 @@ class HomeViewModel: ObservableObject {
                     guard let self = self else { return }
                     let allActivities = activitiesResponse.activities
                     
-                    // 완료된 활동만 필터링 (distance > 0이고 endTime이 있는 활동)
+                    // 완료된 활동만 필터링 (endTime이 있고 실제로 종료된 활동, 거리는 0이어도 시간이 있으면 포함)
                     let completedActivities = allActivities.filter { activity in
-                        activity.distance > 0 && activity.endTime != nil && activity.endTime! > activity.startTime
+                        activity.endTime != nil && activity.endTime! > activity.startTime
                     }
                     
                     let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
-                    let totalTime = completedActivities.reduce(0) { $0 + $1.time }
+                    let totalTime = completedActivities.reduce(0) { $0 + $1.actualRunningTime }
                     let totalCalories = completedActivities.reduce(0) { $0 + ($1.calories ?? 0) }
+                    
+                    print("[HomeViewModel] 📊 오늘 통계: 활동 \(completedActivities.count)개, 거리 \(totalDistance)km, 시간 \(totalTime)초, 칼로리 \(totalCalories)")
+                    for activity in completedActivities {
+                        let pauseCount = activity.pauses?.count ?? 0
+                        let pausedTime = activity.pauses?.reduce(0) { sum, pause in
+                            if let pauseEndedAt = pause.pauseEndedAt {
+                                return sum + pauseEndedAt.timeIntervalSince(pause.pauseStartedAt)
+                            }
+                            return sum + Date().timeIntervalSince(pause.pauseStartedAt)
+                        } ?? 0
+                        print("[HomeViewModel] 📊 Activity \(activity.uuid): actualRunningTime=\(activity.actualRunningTime)초, pauses=\(pauseCount)개, pausedTime=\(pausedTime)초")
+                    }
                     
                     // 오늘 획득한 모든 포인트 합산 (UserPoint의 pointAmount 사용)
                     // userUuid로 필터링하여 현재 사용자의 포인트만 계산
@@ -251,100 +263,148 @@ class HomeViewModel: ObservableObject {
         
         guard let userUuid = currentUserUuid ?? currentUser?.uuid else { return }
         
-        activityService.getActivities(
+        // Activities와 UserPoints를 병렬로 로드
+        let activitiesPublisher = activityService.getActivities(
             startDate: startOfMonth,
             endDate: endOfMonth,
             userUuid: userUuid
+        )
+        
+        let userPointsPublisher = pointService.getUserPoints(
+            startDate: startOfMonth,
+            endDate: endOfMonth,
+            userUuid: userUuid,
+            pointType: .earned
+        )
+        
+        Publishers.Zip(activitiesPublisher, userPointsPublisher)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = error.errorDescription
+                    }
+                },
+                receiveValue: { [weak self] (activitiesResponse, userPointsResponse) in
+                    guard let self = self else { return }
+                    let allActivities = activitiesResponse.activities
+                    
+                    // 완료된 활동만 필터링 (endTime이 있고 실제로 종료된 활동, 거리는 0이어도 시간이 있으면 포함)
+                    let completedActivities = allActivities.filter { activity in
+                        activity.endTime != nil && activity.endTime! > activity.startTime
+                    }
+                    
+                    let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
+                    
+                    // 이번달 획득한 모든 포인트 합산 (UserPoint의 pointAmount 사용)
+                    let totalPoints = userPointsResponse.userPoints
+                        .filter { userPoint in
+                            // point 객체의 type이 earned인 것만, 또는 pointAmount가 양수인 것만
+                            (userPoint.point?.type == .earned || userPoint.pointAmount > 0)
+                        }
+                        .reduce(0) { $0 + $1.pointAmount }
+                    
+                    // Group by week
+                    var weeklyData: [WeeklyData] = []
+                    var currentWeekStart = startOfMonth
+                    var weekNumber = 1
+                    
+                    while currentWeekStart <= endOfMonth {
+                        let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: currentWeekStart)!, endOfMonth)
+                        let weekActivities = completedActivities.filter { activity in
+                            activity.startTime >= currentWeekStart && activity.startTime <= weekEnd
+                        }
+                        let weekDistance = weekActivities.reduce(0) { $0 + $1.distance }
+                        
+                        weeklyData.append(WeeklyData(
+                            week: "Week \(weekNumber)",
+                            distance: weekDistance
+                        ))
+                        
+                        currentWeekStart = calendar.date(byAdding: .day, value: 7, to: currentWeekStart)!
+                        weekNumber += 1
+                    }
+                    
+                    self.monthlyStats = MonthlyStats(
+                        totalDistance: totalDistance,
+                        runningCount: completedActivities.count,
+                        earnedPoints: totalPoints,
+                        weeklyData: weeklyData
+                    )
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    func loadMissions() {
+        guard let userUuid = currentUserUuid ?? currentUser?.uuid else {
+            print("[HomeViewModel] ⚠️ 사용자 UUID를 찾을 수 없어 미션을 로드할 수 없습니다")
+            return
+        }
+        
+        print("[HomeViewModel] 🔵 미션 로드 시작: userUuid=\(userUuid)")
+        
+        // 진행중 + 완료된 미션 모두 조회 (status 필터 없음)
+        missionService.getUserMissions(
+            userUuid: userUuid,
+            status: nil,  // 모든 상태 조회
+            startDate: nil,
+            endDate: nil
         )
         .receive(on: DispatchQueue.main)
         .sink(
             receiveCompletion: { [weak self] completion in
                 if case .failure(let error) = completion {
+                    print("[HomeViewModel] ❌ 미션 로드 실패: \(error)")
                     self?.errorMessage = error.errorDescription
                 }
             },
             receiveValue: { [weak self] response in
                 guard let self = self else { return }
-                let allActivities = response.activities
                 
-                // 완료된 활동만 필터링 (distance > 0이고 endTime이 있는 활동)
-                let completedActivities = allActivities.filter { activity in
-                    activity.distance > 0 && activity.endTime != nil && activity.endTime! > activity.startTime
+                print("[HomeViewModel] 📥 미션 응답 받음: userMissions.count=\(response.userMissions.count)")
+                
+                var validAchievements: [Achievement] = []
+                var skippedCount = 0
+                
+                // 진행중 또는 완료된 미션만 필터링
+                let filteredMissions = response.userMissions.filter { userMission in
+                    userMission.status == .inProgress || userMission.status == .completed
                 }
                 
-                let totalDistance = completedActivities.reduce(0) { $0 + $1.distance }
+                // term과 type 조합별로 그룹화 (월간 거리, 월간 챌린지, 주간 거리, 주간 챌린지)
+                struct MissionKey: Hashable {
+                    let term: MissionTerm
+                    let type: MissionType
+                }
                 
-                // Activity의 pointId로 포인트 금액 계산
-                // pointId는 Int이지만, Point를 찾을 때는 id로 찾고 uuid는 API 호출 시 사용
-                let totalPoints = completedActivities.reduce(0) { sum, activity in
-                    if let pointId = activity.pointId,
-                       let point = self.points.first(where: { $0.id == pointId }) {
-                        return sum + point.point
+                var missionsByKey: [MissionKey: [UserMission]] = [:]
+                for userMission in filteredMissions {
+                    guard let mission = userMission.mission else {
+                        skippedCount += 1
+                        continue
                     }
-                    return sum
-                }
-                
-                // Group by week
-                var weeklyData: [WeeklyData] = []
-                var currentWeekStart = startOfMonth
-                var weekNumber = 1
-                
-                while currentWeekStart <= endOfMonth {
-                    let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: currentWeekStart)!, endOfMonth)
-                    let weekActivities = completedActivities.filter { activity in
-                        activity.startTime >= currentWeekStart && activity.startTime <= weekEnd
+                    let key = MissionKey(term: mission.term, type: mission.type)
+                    if missionsByKey[key] == nil {
+                        missionsByKey[key] = []
                     }
-                    let weekDistance = weekActivities.reduce(0) { $0 + $1.distance }
-                    
-                    weeklyData.append(WeeklyData(
-                        week: "Week \(weekNumber)",
-                        distance: weekDistance
-                    ))
-                    
-                    currentWeekStart = calendar.date(byAdding: .day, value: 7, to: currentWeekStart)!
-                    weekNumber += 1
+                    missionsByKey[key]?.append(userMission)
                 }
                 
-                self.monthlyStats = MonthlyStats(
-                    totalDistance: totalDistance,
-                    runningCount: completedActivities.count,
-                    earnedPoints: totalPoints,
-                    weeklyData: weeklyData
-                )
-            }
-        )
-        .store(in: &cancellables)
-    }
-    
-    func loadMissions() {
-        let calendar = Calendar.current
-        let today = Date()
-        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
-        let endOfWeek = calendar.date(byAdding: .day, value: 7, to: startOfWeek)!
-        
-        guard let userUuid = currentUserUuid ?? currentUser?.uuid else { return }
-        
-        missionService.getUserMissions(
-            userUuid: userUuid,
-            startDate: startOfWeek,
-            endDate: endOfWeek
-        )
-        .receive(on: DispatchQueue.main)
-        .sink(
-            receiveCompletion: { [weak self] completion in
-                if case .failure(let error) = completion {
-                    self?.errorMessage = error.errorDescription
-                }
-            },
-            receiveValue: { [weak self] response in
-                self?.achievements = response.userMissions.compactMap { userMission in
-                    guard let mission = userMission.mission else { return nil }
+                // 각 조합별로 최근 1개씩 선택 (createdAt 기준 내림차순)
+                var achievementsByKey: [MissionKey: Achievement] = [:]
+                for (key, userMissions) in missionsByKey {
+                    let sortedMissions = userMissions.sorted { $0.createdAt > $1.createdAt }
+                    guard let userMission = sortedMissions.first,
+                          let mission = userMission.mission else {
+                        continue
+                    }
                     
                     let progress = Double(userMission.userValue)
                     let target = Double(mission.targetValue)
                     let isCompleted = userMission.status == .completed
                     
-                    return Achievement(
+                    let achievement = Achievement(
                         id: String(userMission.id),
                         title: mission.title,
                         description: "\(userMission.userValue)/\(mission.targetValue)",
@@ -352,11 +412,31 @@ class HomeViewModel: ObservableObject {
                         target: target,
                         isCompleted: isCompleted,
                         rewardPoints: mission.point,
-                        status: userMission.status,  // 서버 상태 추가
-                        term: mission.term,  // 미션 기간 추가
-                        createdAt: userMission.createdAt  // 미션 시작일 추가
+                        status: userMission.status,
+                        term: mission.term,
+                        createdAt: userMission.createdAt
                     )
+                    
+                    achievementsByKey[key] = achievement
+                    print("[HomeViewModel] ✅ Achievement 추가: \(mission.title) (term: \(mission.term.rawValue), type: \(mission.type.rawValue), status: \(userMission.status.rawValue))")
                 }
+                
+                // 지정된 순서대로 정렬: 주간 챌린지 > 주간 거리 > 월간 챌린지 > 월간 거리
+                let orderedKeys: [MissionKey] = [
+                    MissionKey(term: .week, type: .challengeCount),
+                    MissionKey(term: .week, type: .totalDistance),
+                    MissionKey(term: .month, type: .challengeCount),
+                    MissionKey(term: .month, type: .totalDistance)
+                ]
+                
+                for key in orderedKeys {
+                    if let achievement = achievementsByKey[key] {
+                        validAchievements.append(achievement)
+                    }
+                }
+                
+                print("[HomeViewModel] ✅ 총 \(validAchievements.count)개의 미션 표시 (type별 최근 1개씩), \(skippedCount)개 건너뜀")
+                self.achievements = validAchievements
             }
         )
         .store(in: &cancellables)

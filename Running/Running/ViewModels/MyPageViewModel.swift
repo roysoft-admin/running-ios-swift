@@ -67,10 +67,27 @@ class MyPageViewModel: ObservableObject {
     func loadPointHistory() {
         let calendar = Calendar.current
         let now = Date()
-        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now))!
-        let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth)!
         
-        pointViewModel.loadUserPoints(startDate: startOfMonth, endDate: endOfMonth)
+        // 이번 달 1일 00:00:00
+        var startOfMonthComponents = calendar.dateComponents([.year, .month], from: now)
+        startOfMonthComponents.day = 1
+        startOfMonthComponents.hour = 0
+        startOfMonthComponents.minute = 0
+        startOfMonthComponents.second = 0
+        guard let startOfMonth = calendar.date(from: startOfMonthComponents) else { return }
+        
+        // 다음 달 1일을 구한 후 하루를 빼서 이번 달 마지막 날 구하기
+        guard let nextMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth),
+              let endOfMonth = calendar.date(byAdding: .day, value: -1, to: nextMonth) else { return }
+        
+        // 이번 달 마지막 날 23:59:59로 설정
+        var endOfMonthComponents = calendar.dateComponents([.year, .month, .day], from: endOfMonth)
+        endOfMonthComponents.hour = 23
+        endOfMonthComponents.minute = 59
+        endOfMonthComponents.second = 59
+        guard let endOfMonthWithTime = calendar.date(from: endOfMonthComponents) else { return }
+        
+        pointViewModel.loadUserPoints(startDate: startOfMonth, endDate: endOfMonthWithTime)
     }
     
     func updateUser(name: String?, birthday: Date?, gender: User.Gender?, thumbnailUrl: String?, targetWeekDistance: Double?, targetTime: Int?, weight: Double?, authUuid: String?) {
