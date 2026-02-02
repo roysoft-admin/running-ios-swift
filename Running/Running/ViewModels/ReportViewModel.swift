@@ -27,9 +27,7 @@ class ReportViewModel: ObservableObject {
     // TODO: Get current user UUID from app state
     var currentUserUuid: String?
     
-    init() {
-        loadReports()
-    }
+    // init()에서 loadReports() 호출 제거 - 필요할 때만 호출하도록 변경
     
     func loadReports() {
         isLoading = true
@@ -92,15 +90,23 @@ class ReportViewModel: ObservableObject {
     }
     
     func loadActivityDetail(activityUuid: String, completion: @escaping (Activity?) -> Void) {
+        print("[ReportViewModel] 🔵 loadActivityDetail 시작: activityUuid=\(activityUuid)")
         activityService.getActivity(activityUuid: activityUuid)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { result in
-                    if case .failure = result {
+                    print("[ReportViewModel] 📥 loadActivityDetail completion: \(result)")
+                    switch result {
+                    case .finished:
+                        // 성공적으로 완료됨 (receiveValue에서 이미 처리됨)
+                        break
+                    case .failure(let error):
+                        print("[ReportViewModel] ❌ loadActivityDetail 실패: \(error)")
                         completion(nil)
                     }
                 },
                 receiveValue: { response in
+                    print("[ReportViewModel] ✅ loadActivityDetail 성공: activity.uuid=\(response.activity.uuid)")
                     completion(response.activity)
                 }
             )
@@ -125,7 +131,7 @@ class ReportViewModel: ObservableObject {
     
     func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return formatter.string(from: date)
     }
     

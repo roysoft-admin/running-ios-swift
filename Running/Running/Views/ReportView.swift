@@ -197,13 +197,21 @@ struct ReportRow: View {
             
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("시간")
+                    Text("전체 시간")
                         .font(.system(size: 10))
                         .foregroundColor(.gray500)
                     
                     Text(viewModel.formatTime(record.time))
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.gray900)
+                    
+                    Text("실제 러닝")
+                        .font(.system(size: 8))
+                        .foregroundColor(.gray400)
+                    
+                    Text(viewModel.formatTime(record.actualRunningTime))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.emerald500)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -266,9 +274,59 @@ struct ReportDetailView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let record = activity {
-                let isChallenge = record.challengeId != nil
-                
-                ScrollView {
+                reportDetailContent(record: record)
+            } else {
+                Text("활동 정보를 불러올 수 없습니다.")
+                    .foregroundColor(.gray500)
+            }
+        }
+        .task(id: activityUuid) {
+            // AOS의 LaunchedEffect(activityUuid)와 동일하게 activityUuid가 변경될 때만 로드
+            print("[ReportDetailView] 🔵 task 시작: activityUuid=\(activityUuid)")
+            isLoading = true
+            activity = nil
+            
+            viewModel.loadActivityDetail(activityUuid: activityUuid) { loadedActivity in
+                print("[ReportDetailView] 📥 loadActivityDetail completion: loadedActivity=\(loadedActivity?.uuid ?? "nil")")
+                DispatchQueue.main.async {
+                    activity = loadedActivity
+                    isLoading = false
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func backgroundGradient(isChallenge: Bool) -> some View {
+        if isChallenge {
+            LinearGradient(
+                gradient: Gradient(colors: [Color.blue50, Color.purple500.opacity(0.05)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            Color.white
+        }
+    }
+    
+    @ViewBuilder
+    private func scrollViewBackground(isChallenge: Bool) -> some View {
+        if isChallenge {
+            LinearGradient(
+                gradient: Gradient(colors: [Color.blue50.opacity(0.3), Color.purple500.opacity(0.1)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            Color.gray50
+        }
+    }
+    
+    @ViewBuilder
+    private func reportDetailContent(record: Activity) -> some View {
+        let isChallenge = record.challengeId != nil
+        
+        ScrollView {
                     VStack(spacing: 24) {
                         // Record Summary
                         VStack(spacing: 16) {
@@ -280,34 +338,151 @@ struct ReportDetailView: View {
                                 .font(.system(size: 48, weight: .bold))
                                 .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
                             
-                            Text(isChallenge ? "AI 챌린지" : record.type.rawValue)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(isChallenge ? Color.blue50 : Color.emerald50)
-                                .cornerRadius(16)
+                            HStack(spacing: 8) {
+                                Text(isChallenge ? "AI 챌린지" : record.type.rawValue)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
+                                
+                                // 챌린지 성공 여부 표시
+                                if isChallenge, let challengeStatus = record.challengeStatus {
+                                    if challengeStatus == .success {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 12))
+                                            Text("성공")
+                                                .font(.system(size: 12, weight: .semibold))
+                                        }
+                                        .foregroundColor(.green)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.green.opacity(0.1))
+                                        .cornerRadius(8)
+                                    } else if challengeStatus == .failed {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 12))
+                                            Text("실패")
+                                                .font(.system(size: 12, weight: .semibold))
+                                        }
+                                        .foregroundColor(.red)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.red.opacity(0.1))
+                                        .cornerRadius(8)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(isChallenge ? Color.blue50 : Color.emerald50)
+                            .cornerRadius(16)
                         }
                         .padding(24)
                         .frame(maxWidth: .infinity)
-                        .background(
-                            Group {
-                                if isChallenge {
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue50, Color.purple500.opacity(0.05)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                } else {
-                                    Color.white
+                        .background(backgroundGradient(isChallenge: isChallenge))
+                        .cornerRadius(16)
+                        
+                        // 챌린지 목표 정보 표시
+                        if isChallenge, let challenge = record.challenge {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "target")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.blue500)
+                                    
+                                    Text("챌린지 목표")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.gray500)
+                                }
+                                
+                                HStack(spacing: 24) {
+                                    if let targetDistance = challenge.targetDistance {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("거리")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.gray500)
+                                            
+                                            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                                Text(String(format: "%.1f", targetDistance))
+                                                    .font(.system(size: 28, weight: .bold))
+                                                    .foregroundColor(.blue500)
+                                                Text("km")
+                                                    .font(.system(size: 16))
+                                                    .foregroundColor(.gray600)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    
+                                    if let targetTime = challenge.targetTime {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("시간")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.gray500)
+                                            
+                                            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                                Text("\(targetTime)")
+                                                    .font(.system(size: 28, weight: .bold))
+                                                    .foregroundColor(.purple500)
+                                                Text("분")
+                                                    .font(.system(size: 16))
+                                                    .foregroundColor(.gray600)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
                                 }
                             }
-                        )
-                        .cornerRadius(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(Color.gray50)
+                            .cornerRadius(16)
+                            .padding(.horizontal, 16)
+                            
+                            // 챌린지 성공 시 포인트 지급 표시
+                            if let challengeStatus = record.challengeStatus, challengeStatus == .success {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.orange500)
+                                    
+                                    Text("챌린지 완료 포인트 지급 완료")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.gray700)
+                                    
+                                    Spacer()
+                                    
+                                    Text("+30P")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.orange500)
+                                }
+                                .padding(16)
+                                .background(Color.orange50)
+                                .cornerRadius(12)
+                                .padding(.horizontal, 16)
+                            }
+                        }
                         
                         // Stats Grid
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                            StatBox(title: "시간", value: viewModel.formatTime(record.time), unit: "")
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("전체 시간")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.gray500)
+                                
+                                Text(viewModel.formatTime(record.time))
+                                    .font(.system(size: 28, weight: .bold))
+                                    .foregroundColor(.gray900)
+                                
+                                Text("실제 러닝: \(viewModel.formatTime(record.actualRunningTime))")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.emerald500)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(Color.gray50)
+                            .cornerRadius(16)
+                            
                             StatBox(title: "페이스", value: viewModel.formatPace(record.pace), unit: "")
                             StatBox(title: "칼로리", value: "\(record.calories ?? 0)", unit: "kcal")
                             StatBox(title: "포인트", value: "+\(record.points)", unit: "P")
@@ -356,58 +531,28 @@ struct ReportDetailView: View {
                             .cornerRadius(16)
                         }
                         .padding(.horizontal, 16)
+                        .padding(.bottom, 60) // 하단 탭바 높이만큼 공간 확보
                     }
                     .padding(.vertical, 16)
                 }
-                .background(
-                    Group {
-                        if isChallenge {
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.blue50.opacity(0.3), Color.purple500.opacity(0.1)]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        } else {
-                            Color.gray50
+                .background(scrollViewBackground(isChallenge: isChallenge))
+                .navigationTitle("러닝 상세")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    if showBackButton {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                dismiss()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.left")
+                                    Text("뒤로")
+                                }
+                                .foregroundColor(.emerald500)
+                            }
                         }
                     }
-                )
-            } else {
-                VStack {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
-                        .foregroundColor(.gray400)
-                    
-                    Text("데이터를 불러올 수 없습니다")
-                        .font(.system(size: 16))
-                        .foregroundColor(.gray500)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .navigationTitle("러닝 상세")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if showBackButton {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                            Text("뒤로")
-                        }
-                        .foregroundColor(.emerald500)
-                    }
-                }
-            }
-        }
-        .onAppear {
-            viewModel.loadActivityDetail(activityUuid: activityUuid) { loadedActivity in
-                activity = loadedActivity
-                isLoading = false
-            }
-        }
     }
 }
 
