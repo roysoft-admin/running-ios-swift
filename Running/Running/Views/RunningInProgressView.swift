@@ -18,7 +18,7 @@ struct RunningInProgressView: View {
     var body: some View {
         let isChallenge = viewModel.currentChallenge != nil
         
-        ZStack {
+        ZStack(alignment: .bottom) {
             // 챌린지인 경우 배경색 변경
             if isChallenge {
                 LinearGradient(
@@ -28,41 +28,15 @@ struct RunningInProgressView: View {
                 )
                 .ignoresSafeArea()
             } else {
-                Color.gray50.ignoresSafeArea()
+            Color.gray50.ignoresSafeArea()
             }
             
             VStack(spacing: 0) {
-                // Map Area
+                // Map Area (화면 절반, 라운드 영역까지 살짝 겹치도록)
                 ZStack {
-                    if !viewModel.routes.isEmpty {
-                        ActivityMapView(routes: viewModel.routes, isInteractive: true)
-                            .ignoresSafeArea()
-                    } else {
-                        // 챌린지인 경우 다른 그라데이션
-                        if isChallenge {
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.blue100, Color.purple500.opacity(0.2)]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        } else {
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.emerald100, Color.blue50]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        }
-                        
-                        VStack(spacing: 16) {
-                            Image(systemName: "map")
-                                .font(.system(size: 128))
-                                .foregroundColor(.gray400.opacity(0.5))
-                            
-                            Text("실시간 경로 추적 중...")
-                                .font(.system(size: 14))
-                                .foregroundColor(.gray400)
-                        }
-                    }
+                    // 지도를 지도 영역 내부에 배치 (지도 영역의 중앙에 위치가 표시되도록)
+                    ActivityMapView(routes: viewModel.routes, isInteractive: true)
+                        .ignoresSafeArea()
                     
                     VStack {
                         HStack {
@@ -78,9 +52,15 @@ struct RunningInProgressView: View {
                                         value: viewModel.isPaused
                                     )
                                 
-                                Text(viewModel.isPaused ? "일시정지" : (isChallenge ? "챌린지 진행 중" : "러닝 중"))
+                                if viewModel.isPaused {
+                                    Text("일시정지 \(viewModel.formatTime(viewModel.pausedTime))")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.gray900)
+                                } else {
+                                    Text(isChallenge ? "챌린지 진행 중" : "러닝 중")
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundColor(.gray900)
+                                }
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
@@ -108,97 +88,47 @@ struct RunningInProgressView: View {
                         Spacer()
                     }
                 }
+                .frame(height: UIScreen.main.bounds.height * 0.5) // 지도 영역을 화면 절반으로 제한
+                .padding(.bottom, -24) // 라운드 코너 영역까지 지도가 보이도록 음수 마진
                 
-                // Stats & Controls
+                // 하단 영역: 스크롤 가능한 컨텐츠 (화면 절반)
+                GeometryReader { geometry in
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // 일반 러닝 정보
                 VStack(spacing: 24) {
-                    // 챌린지 목표 정보 표시
-                    if let challenge = viewModel.currentChallenge {
-                        VStack(spacing: 12) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "target")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.blue500)
-                                
-                                Text("챌린지 목표")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.gray900)
-                            }
-                            
-                            HStack(spacing: 24) {
-                                if let targetDistance = challenge.targetDistance {
-                                    VStack(spacing: 4) {
-                                        Text("거리")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.gray600)
-                                        HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                            Text(String(format: "%.1f", targetDistance))
-                                                .font(.system(size: 18, weight: .bold))
-                                                .foregroundColor(.blue500)
-                                            Text("km")
-                                                .font(.system(size: 12))
-                                                .foregroundColor(.gray600)
+                                    // First Row: Time and Distance
+                                    HStack(spacing: 24) {
+                                        VStack(spacing: 4) {
+                                            Text("시간")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.gray500)
+                                            
+                                            Text(viewModel.formatTime(viewModel.time))
+                                                .font(.system(size: 32, weight: .bold))
+                                                .foregroundColor(.gray900)
                                         }
-                                    }
-                                }
-                                
-                                if let targetTime = challenge.targetTime {
-                                    VStack(spacing: 4) {
-                                        Text("시간")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.gray600)
-                                        HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                            Text("\(targetTime)")
-                                                .font(.system(size: 18, weight: .bold))
-                                                .foregroundColor(.purple500)
-                                            Text("분")
-                                                .font(.system(size: 12))
-                                                .foregroundColor(.gray600)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .padding(16)
-                        .background(Color.white.opacity(0.9))
-                        .cornerRadius(16)
-                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
-                    }
-                    
-                    // First Row: Time and Distance
-                    HStack(spacing: 24) {
-                        VStack(spacing: 4) {
-                            Text("시간")
-                                .font(.system(size: 14))
-                                .foregroundColor(.gray500)
-                            
-                            Text(viewModel.formatTime(viewModel.time))
-                                .font(.system(size: 32, weight: .bold))
-                                .foregroundColor(.gray900)
-                        }
-                        .frame(maxWidth: .infinity)
+                                        .frame(maxWidth: .infinity)
+                                        
+                                        VStack(spacing: 4) {
+                        Text("거리")
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray500)
                         
-                        VStack(spacing: 4) {
-                            Text("거리")
-                                .font(.system(size: 14))
-                                .foregroundColor(.gray500)
+                                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(String(format: "%.2f", viewModel.distance))
+                                                    .font(.system(size: 32, weight: .bold))
+                                                    .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
                             
-                            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                Text(String(format: "%.2f", viewModel.distance))
-                                    .font(.system(size: 32, weight: .bold))
-                                    .foregroundColor(isChallenge ? Color.blue500 : Color.emerald500)
-                                
-                                Text("km")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.gray500)
-                            }
+                            Text("km")
+                                                    .font(.system(size: 16))
+                                .foregroundColor(.gray500)
                         }
-                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.top, 24)
+                                        .frame(maxWidth: .infinity)
+                                    }
                     
-                    // Second Row: Pace, Speed, Calories
+                                    // Second Row: Pace, Speed, Calories
                     HStack(spacing: 16) {
                         VStack(spacing: 4) {
                             Text("페이스")
@@ -212,11 +142,11 @@ struct RunningInProgressView: View {
                         .frame(maxWidth: .infinity)
                         
                         VStack(spacing: 4) {
-                            Text("시속")
+                                            Text("시속")
                                 .font(.system(size: 10))
                                 .foregroundColor(.gray500)
                             
-                            Text(viewModel.formatSpeed(viewModel.speed))
+                                            Text(viewModel.formatSpeed(viewModel.speed))
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.gray900)
                         }
@@ -233,8 +163,108 @@ struct RunningInProgressView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
+                                }
+                                .padding(.top, 24)
+                                
+                                // 컨텐츠형 광고
+                                VStack {
+                                    Text("광고 영역")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.gray600)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 100)
+                                        .background(Color.gray100)
+                                        .cornerRadius(12)
+                                }
+                                .padding(.horizontal, 24)
+                                
+                                // 챌린지 정보 (있으면)
+                                if let challenge = viewModel.currentChallenge {
+                                    VStack(spacing: 16) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "target")
+                                                .font(.system(size: 18))
+                                                .foregroundColor(.blue500)
+                                            
+                                            Text("챌린지 목표")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(.gray900)
+                                        }
+                                        
+                                        HStack(spacing: 32) {
+                                            if let targetDistance = challenge.targetDistance {
+                                                VStack(spacing: 6) {
+                                                    Text("거리")
+                                                        .font(.system(size: 12))
+                                                        .foregroundColor(.gray600)
+                                                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                                        Text(String(format: "%.1f", targetDistance))
+                                                            .font(.system(size: 24, weight: .bold))
+                                                            .foregroundColor(.blue500)
+                                                        Text("km")
+                                                            .font(.system(size: 14))
+                                                            .foregroundColor(.gray600)
+                                                    }
+                                                }
+                                            }
+                                            
+                                            if let targetTime = challenge.targetTime {
+                                                VStack(spacing: 6) {
+                                                    Text("시간")
+                                                        .font(.system(size: 12))
+                                                        .foregroundColor(.gray600)
+                                                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                                        Text("\(targetTime)")
+                                                            .font(.system(size: 24, weight: .bold))
+                                                            .foregroundColor(.purple500)
+                                                        Text("분")
+                                                            .font(.system(size: 14))
+                                                            .foregroundColor(.gray600)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding(20)
+                                    .background(Color.white.opacity(0.95))
+                                    .cornerRadius(16)
+                                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                    .padding(.horizontal, 24)
+                                }
+                                
+                                // 안전 문구
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Color.blue500)
+                                    
+                                    Text("🚦 안전한 러닝을 위해 주변을 항상 확인하세요")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Color.blue500)
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.blue50)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.blue200, lineWidth: 1)
+                                )
+                                .cornerRadius(12)
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 80) // 버튼 높이만큼 공간 확보
+                        }
+                    }
+                    .frame(height: geometry.size.height) // 정보 영역을 화면 절반으로 설정
+                }
+                .background(Color.white)
+                .cornerRadius(24, corners: [.topLeft, .topRight])
+            }
+            
+            // 고정된 버튼 영역 (하단에 직접 고정, safeArea 고려)
+            GeometryReader { geometry in
+                VStack {
+                    Spacer()
                     
-                    // Control Buttons
                     HStack(spacing: 12) {
                         Button(action: {
                             if viewModel.isPaused {
@@ -270,29 +300,11 @@ struct RunningInProgressView: View {
                                 .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
                         }
                     }
-                    
-                    // Safety Message
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color.blue500)
-                        
-                        Text("🚦 안전한 러닝을 위해 주변을 항상 확인하세요")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color.blue500)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.blue50)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.blue200, lineWidth: 1)
-                    )
-                    .cornerRadius(12)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 4)
+                    .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? geometry.safeAreaInsets.bottom : 0) // safeArea 높이만큼 padding 추가
+                    .background(Color.white)
                 }
-                .padding(24)
-                .background(Color.white)
-                .cornerRadius(24, corners: [.topLeft, .topRight])
             }
             
             // 카운트다운 오버레이

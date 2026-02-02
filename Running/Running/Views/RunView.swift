@@ -14,14 +14,14 @@ struct RunView: View {
     @EnvironmentObject var appState: AppState
     
     var body: some View {
-        ZStack {
+                ZStack {
             // Map Area - 전체 화면
-            ActivityMapView(routes: [], isInteractive: false)
+                    ActivityMapView(routes: [], isInteractive: false)
                 .ignoresSafeArea()
-            
+                    
             // Stats Area - 하단에 고정
-            VStack {
-                Spacer()
+                    VStack {
+                        Spacer()
                 
                 VStack(spacing: 24) {
                     // Start Button
@@ -54,7 +54,7 @@ struct RunView: View {
                 }
                 .padding(24)
                 .background(Color.white)
-                .padding(.bottom, 80) // 하단 바 공간 확보
+                .padding(.bottom, 60) // 하단 탭 바 높이
             }
         }
         .background(Color.gray50)
