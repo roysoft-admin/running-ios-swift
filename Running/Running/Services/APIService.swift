@@ -11,9 +11,9 @@ import Combine
 class APIService {
     static let shared = APIService()
     
-    // 테스트용: localhost 사용
-    private let baseURL = "http://localhost:3031"
-    // 프로덕션용: private let baseURL = "https://running.roysoft.co.kr"
+    // 프로덕션용
+    private let baseURL = "https://running.roysoft.co.kr"
+    // 테스트용: private let baseURL = "http://localhost:3031"
     private let tokenManager = TokenManager.shared
     private let session: URLSession
     

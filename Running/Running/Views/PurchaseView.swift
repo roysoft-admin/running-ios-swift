@@ -24,7 +24,7 @@ struct PurchaseView: View {
                     HStack(spacing: 16) {
                         // Product Image
                         if let imageUrl = viewModel.shopItem.imageUrl, !imageUrl.isEmpty {
-                            let fullUrl = imageUrl.hasPrefix("http") ? imageUrl : "http://localhost:3031\(imageUrl.hasPrefix("/") ? imageUrl : "/\(imageUrl)")"
+                            let fullUrl = imageUrl.hasPrefix("http") ? imageUrl : "https://running.roysoft.co.kr\(imageUrl.hasPrefix("/") ? imageUrl : "/\(imageUrl)")"
                             AsyncImage(url: URL(string: fullUrl)) { phase in
                                 switch phase {
                                 case .empty:
