@@ -47,7 +47,7 @@ class RunViewModel: NSObject, ObservableObject {
     private var locationManager: CLLocationManager?
     private var lastLocation: CLLocation?
     private var routeSeq: Int = 0
-    private var notificationUpdateTimer: Timer?
+    var notificationUpdateTimer: Timer?
     
     // 최근 30초간의 위치 데이터 (시속 계산용)
     private struct LocationWithTime {
@@ -571,7 +571,6 @@ class RunViewModel: NSObject, ObservableObject {
             }
             
             self.updateNotification()
-            }
         }
         
         if Thread.isMainThread {
@@ -849,7 +848,6 @@ class RunViewModel: NSObject, ObservableObject {
                     self.startTimer()
                     self.startLocationTracking()
                     self.startRouteTracking()
-        startNotification()
                     self.startNotification()
                     timer.invalidate()
                     print("[RunViewModel] ✅ 타이머 및 경로 추적 시작 (실제 시작 시간: \(actualStartTime))")

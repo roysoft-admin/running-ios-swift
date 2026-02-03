@@ -12,6 +12,15 @@ struct DailyStats {
     let time: TimeInterval // seconds
     let calories: Int
     let points: Int
+    let dailyPointEarnings: DailyPointEarnings
+}
+
+struct DailyPointEarnings {
+    let attendance: Bool // 출석 10
+    let challenge50: Bool // 챌린지 50
+    let challengeAd30: Bool // 챌린지 완료 후 광고 시청 30
+    let extraChallenge50: Bool // 추가 챌린지 50
+    let shareCount: Int // 공유 5 (1/5)
 }
 
 struct WeeklyStats {

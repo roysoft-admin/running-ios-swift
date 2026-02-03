@@ -286,10 +286,69 @@ struct DailyStatsView: View {
                     backgroundColor: Color.orange50
                 )
             }
+            
+            // 일일 포인트 획득 정보
+            VStack(alignment: .leading, spacing: 12) {
+                Text("일일 포인트 획득")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.gray900)
+                    .padding(.top, 8)
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    DailyPointRow(title: "출석", points: 10, isEarned: stats.dailyPointEarnings.attendance)
+                    DailyPointRow(title: "챌린지", points: 50, isEarned: stats.dailyPointEarnings.challenge50)
+                    DailyPointRow(title: "챌린지 완료 후 광고 시청", points: 30, isEarned: stats.dailyPointEarnings.challengeAd30)
+                    DailyPointRow(title: "추가 챌린지", points: 50, isEarned: stats.dailyPointEarnings.extraChallenge50)
+                    DailyPointRow(title: "공유", points: 5, count: stats.dailyPointEarnings.shareCount, maxCount: 5)
+                }
+            }
         }
         .padding(24)
         .background(Color.white)
         .cornerRadius(16)
+    }
+}
+
+struct DailyPointRow: View {
+    let title: String
+    let points: Int
+    var isEarned: Bool = false
+    var count: Int = 0
+    var maxCount: Int = 0
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 14))
+                .foregroundColor(.gray700)
+            
+            Spacer()
+            
+            if maxCount > 0 {
+                // 공유처럼 횟수가 있는 경우
+                Text("\(points)P \(count)/\(maxCount)")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(count > 0 ? Color.emerald500 : Color.gray400)
+            } else {
+                // 획득 여부만 표시하는 경우
+                HStack(spacing: 4) {
+                    Text("\(points)P")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(isEarned ? Color.emerald500 : Color.gray400)
+                    
+                    if isEarned {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.emerald500)
+                    } else {
+                        Image(systemName: "circle")
+                            .font(.system(size: 16))
+                            .foregroundColor(.gray400)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 

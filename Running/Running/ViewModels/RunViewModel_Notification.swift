@@ -11,7 +11,7 @@ import UserNotifications
 extension RunViewModel {
     // MARK: - Notification Management
     
-    private func startNotification() {
+    func startNotification() {
         // Notification 권한 요청
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
@@ -31,7 +31,7 @@ extension RunViewModel {
         }
     }
     
-    private func stopNotification() {
+    func stopNotification() {
         notificationUpdateTimer?.invalidate()
         notificationUpdateTimer = nil
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
@@ -45,7 +45,7 @@ extension RunViewModel {
         }
     }
     
-    private func updateNotification() {
+    func updateNotification() {
         guard isRunning else { return }
         
         let timeText = formatTime(time)

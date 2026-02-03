@@ -180,18 +180,54 @@ class HomeViewModel: ObservableObject {
                     
                     // 오늘 획득한 모든 포인트 합산 (UserPoint의 pointAmount 사용)
                     // userUuid로 필터링하여 현재 사용자의 포인트만 계산
-                    let totalPoints = userPointsResponse.userPoints
+                    let earnedUserPoints = userPointsResponse.userPoints
                         .filter { userPoint in
                             // point 객체의 type이 earned인 것만, 또는 pointAmount가 양수인 것만
                             (userPoint.point?.type == .earned || userPoint.pointAmount > 0)
                         }
-                        .reduce(0) { $0 + $1.pointAmount }
+                    
+                    let totalPoints = earnedUserPoints.reduce(0) { $0 + $1.pointAmount }
+                    
+                    // 일일 포인트 획득 정보 계산
+                    var attendance = false
+                    var challenge50 = false
+                    var challengeAd30 = false
+                    var extraChallenge50 = false
+                    var shareCount = 0
+                    
+                    for userPoint in earnedUserPoints {
+                        guard let point = userPoint.point else { continue }
+                        
+                        if point.title == "출석 보상" && point.point == 10 {
+                            attendance = true
+                        } else if point.title == "챌린지 완료" && point.point == 50 {
+                            challenge50 = true
+                        } else if point.title == "챌린지 완료 후 광고 시청" && point.point == 30 {
+                            challengeAd30 = true
+                        } else if point.title == "추가 챌린지" && point.point == 50 {
+                            extraChallenge50 = true
+                        } else if point.title == "러닝 공유" && point.point == 5 {
+                            shareCount += 1
+                        }
+                    }
+                    
+                    // 공유는 최대 5회
+                    shareCount = min(shareCount, 5)
+                    
+                    let dailyPointEarnings = DailyPointEarnings(
+                        attendance: attendance,
+                        challenge50: challenge50,
+                        challengeAd30: challengeAd30,
+                        extraChallenge50: extraChallenge50,
+                        shareCount: shareCount
+                    )
                     
                     self.dailyStats = DailyStats(
                         distance: totalDistance,
                         time: totalTime,
                         calories: totalCalories,
-                        points: totalPoints
+                        points: totalPoints,
+                        dailyPointEarnings: dailyPointEarnings
                     )
                 }
             )
