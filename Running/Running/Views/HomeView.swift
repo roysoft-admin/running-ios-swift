@@ -138,6 +138,13 @@ struct HomeView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, viewModel.loginRewardClaimed || viewModel.currentUser == nil ? 24 : 16)
                 
+                // 일일 포인트 획득 섹션 (모든 탭에서 표시, 미션 위에 배치)
+                if let dailyStats = viewModel.dailyStats {
+                    DailyPointEarningsSection(dailyPointEarnings: dailyStats.dailyPointEarnings)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                }
+                
                 // Achievement Section (미션이 있을 때만 표시)
                 if !viewModel.achievements.isEmpty {
                     VStack(alignment: .leading, spacing: 16) {
@@ -286,21 +293,28 @@ struct DailyStatsView: View {
                     backgroundColor: Color.orange50
                 )
             }
+        }
+        .padding(24)
+        .background(Color.white)
+        .cornerRadius(16)
+    }
+}
+
+struct DailyPointEarningsSection: View {
+    let dailyPointEarnings: DailyPointEarnings
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("일일 포인트 획득")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.gray900)
             
-            // 일일 포인트 획득 정보
-            VStack(alignment: .leading, spacing: 12) {
-                Text("일일 포인트 획득")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.gray900)
-                    .padding(.top, 8)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    DailyPointRow(title: "출석", points: 10, isEarned: stats.dailyPointEarnings.attendance)
-                    DailyPointRow(title: "챌린지", points: 50, isEarned: stats.dailyPointEarnings.challenge50)
-                    DailyPointRow(title: "챌린지 완료 후 광고 시청", points: 30, isEarned: stats.dailyPointEarnings.challengeAd30)
-                    DailyPointRow(title: "추가 챌린지", points: 50, isEarned: stats.dailyPointEarnings.extraChallenge50)
-                    DailyPointRow(title: "공유", points: 5, count: stats.dailyPointEarnings.shareCount, maxCount: 5)
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                DailyPointRow(title: "출석", points: 10, isEarned: dailyPointEarnings.attendance)
+                DailyPointRow(title: "챌린지", points: 50, isEarned: dailyPointEarnings.challenge50)
+                DailyPointRow(title: "챌린지 완료 후 광고 시청", points: 30, isEarned: dailyPointEarnings.challengeAd30)
+                DailyPointRow(title: "추가 챌린지", points: 50, isEarned: dailyPointEarnings.extraChallenge50)
+                DailyPointRow(title: "공유", points: 5, count: dailyPointEarnings.shareCount, maxCount: 5)
             }
         }
         .padding(24)
