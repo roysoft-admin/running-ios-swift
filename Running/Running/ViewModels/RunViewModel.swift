@@ -867,3 +867,36 @@ class RunViewModel: ObservableObject {
     }
 }
 
+// MARK: - CLLocationManagerDelegate
+extension RunViewModel: CLLocationManagerDelegate {
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else { return }
+        lastLocation = location
+        
+        // 위치 업데이트 처리 (거리 계산 등)
+        // 이 부분은 기존 로직과 통합 필요
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Location tracking error: \(error.localizedDescription)")
+    }
+    
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedAlways:
+            // 항상 허용됨 - 백그라운드 위치 추적 가능
+            break
+        case .authorizedWhenInUse:
+            // 사용 중에만 허용됨 - 백그라운드 위치 추적 불가
+            print("Warning: Only 'When In Use' location permission granted. Background tracking may not work.")
+        case .denied, .restricted:
+            // 권한 거부됨
+            print("Location permission denied or restricted")
+        case .notDetermined:
+            // 아직 결정되지 않음
+            manager.requestAlwaysAuthorization()
+        @unknown default:
+            break
+        }
+    }
+}
