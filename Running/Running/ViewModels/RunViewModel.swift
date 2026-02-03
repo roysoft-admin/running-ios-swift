@@ -627,12 +627,16 @@ class RunViewModel: NSObject, ObservableObject {
                       let activityUuid = self.currentActivityUuid,
                       !self.isPaused else { return }
             
-            // TODO: Get actual location from CLLocationManager
-            // For now, simulate with last known location or default
-            let lat = self.lastLocation?.coordinate.latitude ?? 37.5665
-            let long = self.lastLocation?.coordinate.longitude ?? 126.9780
-            let speed = self.lastLocation?.speed ?? nil
-            let altitude = self.lastLocation?.altitude ?? nil
+            // 현재 위치가 없으면 첫 번째 위치가 올 때까지 기다림
+            guard let location = self.lastLocation else {
+                print("[RunViewModel] ⚠️ 위치가 아직 없어서 Route tracking 스킵")
+                return
+            }
+            
+            let lat = location.coordinate.latitude
+            let long = location.coordinate.longitude
+            let speed = location.speed >= 0 ? location.speed : nil
+            let altitude = location.altitude >= 0 ? location.altitude : nil
             
             // 최근 30초간의 위치 데이터 저장 (시속 계산용)
             let now = Date()
@@ -793,64 +797,93 @@ class RunViewModel: NSObject, ObservableObject {
     
     // 카운트다운 시작
     private func startCountdown() {
-        countdown = 3
-        countdownTimer?.invalidate()
+        print("[RunViewModel] 🔵 카운트다운 시작 전 현재 위치 확인")
         
-        var currentCount = 3
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+        // 먼저 위치 추적 시작하여 현재 위치 가져오기
+        startLocationTracking()
+        
+        // 첫 번째 위치 업데이트를 기다림 (최대 5초)
+        let startTime = Date()
+        var locationReceived = false
+        
+        let locationCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] timer in
             guard let self = self else {
                 timer.invalidate()
                 return
             }
             
-            currentCount -= 1
-            
-            if currentCount > 0 {
-                self.countdown = currentCount
-            } else if currentCount == 0 {
-                // Go 표시를 위해 -1로 설정 (nil과 구분)
-                self.countdown = -1
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    // Go 표시 후 실제 러닝 시작 - 카운트다운이 끝난 시점을 시작 시간으로 설정
-                    let actualStartTime = Date()
-                    self.startTime = actualStartTime
-                    self.activityStartTime = actualStartTime
-                    self.time = 0
-                    self.totalPausedTime = 0
-                    
-                    // 백엔드의 start_time을 카운트다운 종료 시점으로 업데이트
-                    if let activityUuid = self.currentActivityUuid {
-                        self.activityService.updateActivity(
-                            activityUuid: activityUuid,
-                            distance: nil,
-                            endTime: nil,
-                            averageSpeed: nil,
-                            calories: nil,
-                            startTime: actualStartTime
-                        )
-                        .receive(on: DispatchQueue.main)
-                        .sink(
-                            receiveCompletion: { completion in
-                                if case .failure(let error) = completion {
-                                    print("[RunViewModel] ⚠️ start_time 업데이트 실패: \(error)")
-                                } else {
-                                    print("[RunViewModel] ✅ start_time 업데이트 성공")
-                                }
-                            },
-                            receiveValue: { _ in }
-                        )
-                        .store(in: &self.cancellables)
+            // 위치가 받아졌거나 5초가 지났으면 카운트다운 시작
+            if self.lastLocation != nil || Date().timeIntervalSince(startTime) > 5.0 {
+                locationReceived = true
+                timer.invalidate()
+                
+                if self.lastLocation != nil {
+                    print("[RunViewModel] ✅ 현재 위치 확인: \(self.lastLocation!.coordinate.latitude), \(self.lastLocation!.coordinate.longitude)")
+                } else {
+                    print("[RunViewModel] ⚠️ 위치를 가져오지 못했지만 카운트다운 시작")
+                }
+                
+                // 카운트다운 시작
+                self.countdown = 3
+                self.countdownTimer?.invalidate()
+                
+                var currentCount = 3
+                self.countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+                    guard let self = self else {
+                        timer.invalidate()
+                        return
                     }
                     
-                    self.countdown = nil
-                    self.isRunning = true
-                    self.isPaused = false
-                    self.startTimer()
-                    self.startLocationTracking()
-                    self.startRouteTracking()
-                    self.startNotification()
-                    timer.invalidate()
-                    print("[RunViewModel] ✅ 타이머 및 경로 추적 시작 (실제 시작 시간: \(actualStartTime))")
+                    currentCount -= 1
+                    
+                    if currentCount > 0 {
+                        self.countdown = currentCount
+                    } else if currentCount == 0 {
+                        // Go 표시를 위해 -1로 설정 (nil과 구분)
+                        self.countdown = -1
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            // Go 표시 후 실제 러닝 시작 - 카운트다운이 끝난 시점을 시작 시간으로 설정
+                            let actualStartTime = Date()
+                            self.startTime = actualStartTime
+                            self.activityStartTime = actualStartTime
+                            self.time = 0
+                            self.totalPausedTime = 0
+                            
+                            // 백엔드의 start_time을 카운트다운 종료 시점으로 업데이트
+                            if let activityUuid = self.currentActivityUuid {
+                                self.activityService.updateActivity(
+                                    activityUuid: activityUuid,
+                                    distance: nil,
+                                    endTime: nil,
+                                    averageSpeed: nil,
+                                    calories: nil,
+                                    startTime: actualStartTime
+                                )
+                                .receive(on: DispatchQueue.main)
+                                .sink(
+                                    receiveCompletion: { completion in
+                                        if case .failure(let error) = completion {
+                                            print("[RunViewModel] ⚠️ start_time 업데이트 실패: \(error)")
+                                        } else {
+                                            print("[RunViewModel] ✅ start_time 업데이트 성공")
+                                        }
+                                    },
+                                    receiveValue: { _ in }
+                                )
+                                .store(in: &self.cancellables)
+                            }
+                            
+                            self.countdown = nil
+                            self.isRunning = true
+                            self.isPaused = false
+                            self.startTimer()
+                            // startLocationTracking()은 카운트다운 시작 전에 이미 호출됨
+                            self.startRouteTracking()
+                            self.startNotification()
+                            timer.invalidate()
+                            print("[RunViewModel] ✅ 타이머 및 경로 추적 시작 (실제 시작 시간: \(actualStartTime))")
+                        }
+                    }
                 }
             }
         }
