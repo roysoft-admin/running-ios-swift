@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import CoreLocation
+import UserNotifications
 
 class RunViewModel: ObservableObject {
     @Published var distance: Double = 0.00
@@ -576,10 +577,22 @@ class RunViewModel: ObservableObject {
     }
     
     private func startLocationTracking() {
-        // TODO: Implement CoreLocation for actual GPS tracking
-        // For now, simulate location updates
         locationManager = CLLocationManager()
-        // Request location permissions and start tracking
+        locationManager?.delegate = self
+        locationManager?.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager?.distanceFilter = 10 // 10미터마다 업데이트
+        locationManager?.allowsBackgroundLocationUpdates = true // 백그라운드 위치 추적 허용
+        locationManager?.pausesLocationUpdatesAutomatically = false // 자동 일시정지 비활성화
+        
+        // 위치 권한 요청
+        locationManager?.requestAlwaysAuthorization()
+        locationManager?.startUpdatingLocation()
+    }
+    
+    private func stopLocationTracking() {
+        locationManager?.stopUpdatingLocation()
+        locationManager?.allowsBackgroundLocationUpdates = false
+        locationManager = nil
     }
     
     private func startRouteTracking() {
