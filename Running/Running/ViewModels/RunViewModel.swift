@@ -570,7 +570,8 @@ class RunViewModel: NSObject, ObservableObject {
                 self.pace = 0
             }
             
-            self.updateNotification()
+            // Lock Screen & Control Center만 업데이트 (노티는 매초 업데이트하지 않음)
+            self.updateNowPlayingInfo()
         }
         
         if Thread.isMainThread {
