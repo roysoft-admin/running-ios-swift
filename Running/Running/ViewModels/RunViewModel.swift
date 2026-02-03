@@ -10,7 +10,7 @@ import Combine
 import CoreLocation
 import UserNotifications
 
-class RunViewModel: ObservableObject {
+class RunViewModel: NSObject, ObservableObject {
     @Published var distance: Double = 0.00
     @Published var time: TimeInterval = 0
     @Published var pace: Double = 0
@@ -47,6 +47,7 @@ class RunViewModel: ObservableObject {
     private var locationManager: CLLocationManager?
     private var lastLocation: CLLocation?
     private var routeSeq: Int = 0
+    private var notificationUpdateTimer: Timer?
     
     // 최근 30초간의 위치 데이터 (시속 계산용)
     private struct LocationWithTime {
@@ -319,6 +320,8 @@ class RunViewModel: ObservableObject {
                 self.pauseStartTime = nil
                 self.startTimer()
                 self.startRouteTracking()
+        startNotification()
+                    self.startNotification()
             }
             return
         }
@@ -358,8 +361,13 @@ class RunViewModel: ObservableObject {
             self.pausedTime = 0 // 일시정지 시간 리셋
             self.pauseTimer?.invalidate() // 일시정지 타이머 정지
             self.pauseTimer = nil
+        
+        stopLocationTracking()
+        stopNotification()
             self.startTimer()
             self.startRouteTracking()
+        startNotification()
+                    self.startNotification()
         }
     }
     
@@ -408,6 +416,9 @@ class RunViewModel: ObservableObject {
             pausedTime = 0
             pauseTimer?.invalidate()
             pauseTimer = nil
+        
+        stopLocationTracking()
+        stopNotification()
             currentPauseUuid = nil
         }
         
@@ -418,6 +429,9 @@ class RunViewModel: ObservableObject {
         timer = nil
         routeTimer = nil
         pauseTimer = nil
+        
+        stopLocationTracking()
+        stopNotification()
         
         // 최종 시간 계산
         if let startTime = startTime {
@@ -500,6 +514,9 @@ class RunViewModel: ObservableObject {
         pausedTime = 0
         pauseTimer?.invalidate()
         pauseTimer = nil
+        
+        stopLocationTracking()
+        stopNotification()
     }
     
     private func reset() {
@@ -551,6 +568,9 @@ class RunViewModel: ObservableObject {
                 self.pace = (self.time / 60) / self.distance
             } else {
                 self.pace = 0
+            }
+            
+            self.updateNotification()
             }
         }
         
@@ -829,6 +849,8 @@ class RunViewModel: ObservableObject {
                     self.startTimer()
                     self.startLocationTracking()
                     self.startRouteTracking()
+        startNotification()
+                    self.startNotification()
                     timer.invalidate()
                     print("[RunViewModel] ✅ 타이머 및 경로 추적 시작 (실제 시작 시간: \(actualStartTime))")
                 }
@@ -857,6 +879,7 @@ class RunViewModel: ObservableObject {
         startTimer()
         startLocationTracking()
         startRouteTracking()
+        startNotification()
         
         print("[RunViewModel] ✅ 러닝 상태 복원 완료: time=\(self.time)초")
     }
