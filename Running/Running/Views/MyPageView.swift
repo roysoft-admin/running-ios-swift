@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct MyPageView: View {
     @StateObject private var viewModel = MyPageViewModel()
@@ -240,10 +241,10 @@ struct MyPageView: View {
             InquiryModalView()
         }
         .sheet(isPresented: $viewModel.showEmailVerification) {
-            EmailVerificationModalView()
+            EmailVerificationModalView(viewModel: viewModel)
         }
         .sheet(isPresented: $viewModel.showPhoneVerification) {
-            PhoneVerificationModalView()
+            PhoneVerificationModalView(viewModel: viewModel)
         }
         .sheet(isPresented: $showWebView) {
             if let url = webViewURL {
@@ -349,14 +350,50 @@ struct MenuItemView: View {
 
 struct EmailVerificationModalView: View {
     @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: MyPageViewModel
+    @StateObject private var bag = CancellableBag()
+    
+    @State private var email: String = ""
+    @State private var verificationCode: String = ""
+    @State private var isCodeSent: Bool = false
+    @State private var isVerified: Bool = false
+    @State private var countdown: Int = 0
+    @State private var authUuid: String?
+    @State private var errorMessage: String?
     
     var body: some View {
         NavigationView {
-            VStack {
-                Text("이메일 인증 모달")
-                    .padding()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("이메일을 인증하면 포인트 사용 및 일부 기능을 이용할 수 있습니다.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.gray900)
+                    
+                    EmailVerificationSection(
+                        email: $email,
+                        verificationCode: $verificationCode,
+                        isCodeSent: $isCodeSent,
+                        isVerified: $isVerified,
+                        countdown: $countdown,
+                        onSendCode: sendCode,
+                        onVerifyCode: verifyCode
+                    )
+                    
+                    if isVerified, authUuid != nil {
+                        Button(action: applyAndDismiss) {
+                            Text("이메일 저장")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.emerald500)
+                                .cornerRadius(12)
+                        }
+                    }
+                }
+                .padding(24)
             }
-            .navigationTitle("이메일 변경")
+            .navigationTitle("이메일 인증")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -365,18 +402,110 @@ struct EmailVerificationModalView: View {
                     }
                 }
             }
+            .onAppear {
+                email = viewModel.user?.email ?? ""
+            }
+            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+                if isCodeSent && !isVerified && countdown > 0 {
+                    countdown -= 1
+                }
+            }
+            .alert("오류", isPresented: .constant(errorMessage != nil)) {
+                Button("확인") { errorMessage = nil }
+            } message: {
+                if let msg = errorMessage { Text(msg) }
+            }
         }
+    }
+    
+    private func sendCode() {
+        guard !email.isEmpty else { return }
+        AuthService.shared.requestVerification(type: "email", email: email)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        errorMessage = error.errorDescription
+                    }
+                },
+                receiveValue: { response in
+                    authUuid = response.authUuid
+                    isCodeSent = true
+                    countdown = 300
+                }
+            )
+            .store(in: &bag.storage)
+    }
+    
+    private func verifyCode() {
+        guard let uuid = authUuid, verificationCode.count == 6 else { return }
+        AuthService.shared.verify(authUuid: uuid, code: verificationCode)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        errorMessage = error.errorDescription
+                    }
+                },
+                receiveValue: { _ in
+                    isVerified = true
+                }
+            )
+            .store(in: &bag.storage)
+    }
+    
+    private func applyAndDismiss() {
+        guard let uuid = authUuid else { return }
+        viewModel.updateUser(name: nil, birthday: nil, gender: nil, thumbnailUrl: nil, targetWeekDistance: nil, targetTime: nil, weight: nil, authUuid: uuid)
+        viewModel.loadUser()
+        dismiss()
     }
 }
 
 struct PhoneVerificationModalView: View {
     @Environment(\.dismiss) var dismiss
+    @ObservedObject var viewModel: MyPageViewModel
+    @StateObject private var bag = CancellableBag()
+    
+    @State private var phoneNumber: String = ""
+    @State private var verificationCode: String = ""
+    @State private var isCodeSent: Bool = false
+    @State private var isVerified: Bool = false
+    @State private var countdown: Int = 0
+    @State private var authUuid: String?
+    @State private var errorMessage: String?
     
     var body: some View {
         NavigationView {
-            VStack {
-                Text("전화번호 인증 모달")
-                    .padding()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("전화번호를 인증하면 포인트 사용 및 일부 기능을 이용할 수 있습니다.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.gray900)
+                    
+                    PhoneVerificationSection(
+                        phoneNumber: $phoneNumber,
+                        verificationCode: $verificationCode,
+                        isCodeSent: $isCodeSent,
+                        isVerified: $isVerified,
+                        countdown: $countdown,
+                        onSendCode: sendCode,
+                        onVerifyCode: verifyCode
+                    )
+                    
+                    if isVerified, authUuid != nil {
+                        Button(action: applyAndDismiss) {
+                            Text("전화번호 저장")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.emerald500)
+                                .cornerRadius(12)
+                        }
+                    }
+                }
+                .padding(24)
             }
             .navigationTitle("전화번호 인증")
             .navigationBarTitleDisplayMode(.inline)
@@ -387,8 +516,69 @@ struct PhoneVerificationModalView: View {
                     }
                 }
             }
+            .onAppear {
+                phoneNumber = viewModel.user?.phone ?? ""
+            }
+            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+                if isCodeSent && !isVerified && countdown > 0 {
+                    countdown -= 1
+                }
+            }
+            .alert("오류", isPresented: .constant(errorMessage != nil)) {
+                Button("확인") { errorMessage = nil }
+            } message: {
+                if let msg = errorMessage { Text(msg) }
+            }
         }
     }
+    
+    private func sendCode() {
+        guard !phoneNumber.isEmpty else { return }
+        AuthService.shared.requestVerification(type: "phone", phone: phoneNumber)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        errorMessage = error.errorDescription
+                    }
+                },
+                receiveValue: { response in
+                    authUuid = response.authUuid
+                    isCodeSent = true
+                    countdown = 300
+                }
+            )
+            .store(in: &bag.storage)
+    }
+    
+    private func verifyCode() {
+        guard let uuid = authUuid, verificationCode.count == 6 else { return }
+        AuthService.shared.verify(authUuid: uuid, code: verificationCode)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        errorMessage = error.errorDescription
+                    }
+                },
+                receiveValue: { _ in
+                    isVerified = true
+                }
+            )
+            .store(in: &bag.storage)
+    }
+    
+    private func applyAndDismiss() {
+        guard let uuid = authUuid else { return }
+        viewModel.updateUser(name: nil, birthday: nil, gender: nil, thumbnailUrl: nil, targetWeekDistance: nil, targetTime: nil, weight: nil, authUuid: uuid)
+        viewModel.loadUser()
+        dismiss()
+    }
+}
+
+/// Combine 구독 보관용 (View struct에서 store(in:) 사용을 위해)
+private final class CancellableBag: ObservableObject {
+    var storage = Set<AnyCancellable>()
 }
 
 #Preview {

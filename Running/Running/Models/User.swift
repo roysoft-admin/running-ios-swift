@@ -18,6 +18,8 @@ struct User: BaseEntityProtocol, Codable, Identifiable {
     var kakaoToken: String?
     var naverToken: String?
     var name: String?
+    var email: String?
+    var phone: String?
     var birthday: Date?
     var gender: Gender?
     var thumbnailUrl: String?
@@ -65,7 +67,8 @@ struct User: BaseEntityProtocol, Codable, Identifiable {
         naverToken = try container.decodeIfPresent(String.self, forKey: .naverToken)
         name = try container.decodeIfPresent(String.self, forKey: .name)
         print("[User] ✅ name: \(name ?? "nil")")
-        
+        email = try container.decodeIfPresent(String.self, forKey: .email)
+        phone = try container.decodeIfPresent(String.self, forKey: .phone)
         birthday = try container.decodeIfPresent(Date.self, forKey: .birthday)
         gender = try container.decodeIfPresent(Gender.self, forKey: .gender)
         thumbnailUrl = try container.decodeIfPresent(String.self, forKey: .thumbnailUrl)
@@ -116,6 +119,8 @@ struct User: BaseEntityProtocol, Codable, Identifiable {
         case kakaoToken // 백엔드가 camelCase로 응답
         case naverToken // 백엔드가 camelCase로 응답
         case name
+        case email
+        case phone
         case birthday
         case gender
         case thumbnailUrl // 백엔드가 camelCase로 응답
@@ -127,12 +132,6 @@ struct User: BaseEntityProtocol, Codable, Identifiable {
         case isSubscription // 백엔드가 camelCase로 응답
         case isPush // 백엔드가 camelCase로 응답
         case challengeCount // 백엔드가 camelCase로 응답
-    }
-    
-    // Computed property for email (not in entity, but used in UI)
-    var email: String {
-        // TODO: Get from Auth entity if needed
-        return ""
     }
 }
 
