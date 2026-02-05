@@ -105,6 +105,7 @@ class HomeViewModel: ObservableObject {
             .sink(
                 receiveCompletion: { [weak self] completion in
                     if case .failure(let error) = completion {
+                        print("[HomeViewModel] ❌ 오늘 통계 로드 실패: \(error)")
                         self?.errorMessage = error.errorDescription
                     }
                 },
@@ -127,31 +128,47 @@ class HomeViewModel: ObservableObject {
         let calendar = Calendar.current
         let today = Date()
         let startOfDay = calendar.startOfDay(for: today)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        var endOfDayComponents = calendar.dateComponents([.year, .month, .day], from: startOfDay)
+        endOfDayComponents.hour = 23
+        endOfDayComponents.minute = 59
+        endOfDayComponents.second = 59
+        let endOfDay = calendar.date(from: endOfDayComponents)!
         
         guard let userUuid = currentUserUuid ?? currentUser?.uuid else { return }
         
+        print("[HomeViewModel] 📅 오늘 통계 조회: startedAt=\(startOfDay), endedAt=\(endOfDay)")
+        
         // Activities와 UserPoints를 병렬로 로드
         let activitiesPublisher = activityService.getActivities(
-            startDate: startOfDay,
-            endDate: endOfDay,
+            startedAt: startOfDay,
+            endedAt: endOfDay,
             userUuid: userUuid
         )
         
         let userPointsPublisher = pointService.getUserPoints(
-            startDate: startOfDay,
-            endDate: endOfDay,
+            startedAt: startOfDay,
+            endedAt: endOfDay,
             userUuid: userUuid,
             pointType: .earned
         )
         
-        Publishers.Zip(activitiesPublisher, userPointsPublisher)
+        Publishers.Zip(
+            activitiesPublisher.catch { error -> AnyPublisher<ActivitiesListResponseDTO, Never> in
+                print("[HomeViewModel] ❌ Activities 로드 실패: \(error)")
+                let emptyActivities = ActivitiesListResponseDTO(activities: [], totalCount: 0)
+                return Just(emptyActivities).eraseToAnyPublisher()
+            },
+            userPointsPublisher.catch { error -> AnyPublisher<UserPointsListResponseDTO, Never> in
+                print("[HomeViewModel] ❌ UserPoints 로드 실패: \(error)")
+                let emptyUserPoints = UserPointsListResponseDTO(userPoints: [], totalCount: 0)
+                return Just(emptyUserPoints).eraseToAnyPublisher()
+            }
+        )
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.errorDescription
-                    }
+                    // Never이므로 failure 케이스는 없음
+                    print("[HomeViewModel] ✅ 오늘 통계 로드 완료")
                 },
                 receiveValue: { [weak self] (activitiesResponse, userPointsResponse) in
                     guard let self = self else { return }
@@ -222,12 +239,16 @@ class HomeViewModel: ObservableObject {
                         shareCount: shareCount
                     )
                     
+                    // 오늘 날짜 및 요일 표시
+                    let dateLabel = self.formatDateLabel(Date())
+                    
                     self.dailyStats = DailyStats(
                         distance: totalDistance,
                         time: totalTime,
                         calories: totalCalories,
                         points: totalPoints,
-                        dailyPointEarnings: dailyPointEarnings
+                        dailyPointEarnings: dailyPointEarnings,
+                        dateLabel: dateLabel
                     )
                 }
             )
@@ -237,24 +258,47 @@ class HomeViewModel: ObservableObject {
     func loadWeeklyStats() {
         let calendar = Calendar.current
         let today = Date()
-        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
-        let endOfWeek = calendar.date(byAdding: .day, value: 7, to: startOfWeek)!
+        
+        // 이번 주 월요일 찾기
+        let dayOfWeek = calendar.component(.weekday, from: today)
+        let daysFromMonday = dayOfWeek == 1 ? 6 : dayOfWeek - 2 // 일요일이면 6, 아니면 dayOfWeek - 2
+        let startOfWeek = calendar.date(byAdding: .day, value: -daysFromMonday, to: today)!
+        let startOfWeekComponents = calendar.dateComponents([.year, .month, .day], from: startOfWeek)
+        let startOfWeekDate = calendar.date(from: DateComponents(year: startOfWeekComponents.year, month: startOfWeekComponents.month, day: startOfWeekComponents.day, hour: 0, minute: 0, second: 0))!
+        
+        // 일요일 23:59:59
+        var endOfWeekComponents = calendar.dateComponents([.year, .month, .day], from: startOfWeekDate)
+        endOfWeekComponents.day! += 6
+        endOfWeekComponents.hour = 23
+        endOfWeekComponents.minute = 59
+        endOfWeekComponents.second = 59
+        let endOfWeek = calendar.date(from: endOfWeekComponents)!
+        
+        // 주차 계산
+        let weekLabel = formatWeekLabel(startOfWeekDate)
         
         guard let userUuid = currentUserUuid ?? currentUser?.uuid else { return }
         
+        print("[HomeViewModel] 📅 주간 통계 조회: startedAt=\(startOfWeekDate), endedAt=\(endOfWeek)")
+        
         activityService.getActivities(
-            startDate: startOfWeek,
-            endDate: endOfWeek,
+            startedAt: startOfWeekDate,
+            endedAt: endOfWeek,
             userUuid: userUuid
         )
+        .catch { error -> AnyPublisher<ActivitiesListResponseDTO, Never> in
+            print("[HomeViewModel] ❌ Activities 로드 실패 (주간): \(error)")
+            let emptyActivities = ActivitiesListResponseDTO(activities: [], totalCount: 0)
+            return Just(emptyActivities).eraseToAnyPublisher()
+        }
         .receive(on: DispatchQueue.main)
         .sink(
             receiveCompletion: { [weak self] completion in
-                if case .failure(let error) = completion {
-                    self?.errorMessage = error.errorDescription
-                }
+                // Never이므로 failure 케이스는 없음
+                print("[HomeViewModel] ✅ 주간 통계 로드 완료")
             },
             receiveValue: { [weak self] response in
+                guard let self = self else { return }
                 let allActivities = response.activities
                 
                 // 완료된 활동만 필터링 (distance > 0이고 endTime이 있는 활동)
@@ -269,7 +313,7 @@ class HomeViewModel: ObservableObject {
                 var dailyData: [DailyData] = []
                 
                 for i in 0..<7 {
-                    let date = calendar.date(byAdding: .day, value: i, to: startOfWeek)!
+                    let date = calendar.date(byAdding: .day, value: i, to: startOfWeekDate)!
                     let dayActivities = completedActivities.filter { activity in
                         calendar.isDate(activity.startTime, inSameDayAs: date)
                     }
@@ -281,10 +325,11 @@ class HomeViewModel: ObservableObject {
                     ))
                 }
                 
-                self?.weeklyStats = WeeklyStats(
+                self.weeklyStats = WeeklyStats(
                     totalDistance: totalDistance,
                     runningCount: completedActivities.count,
-                    dailyData: dailyData
+                    dailyData: dailyData,
+                    weekLabel: weekLabel
                 )
             }
         )
@@ -294,32 +339,60 @@ class HomeViewModel: ObservableObject {
     func loadMonthlyStats() {
         let calendar = Calendar.current
         let today = Date()
-        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
-        let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth)!
+        
+        // 이번 달 1일 0시
+        let startOfMonthComponents = calendar.dateComponents([.year, .month], from: today)
+        let startOfMonth = calendar.date(from: DateComponents(year: startOfMonthComponents.year, month: startOfMonthComponents.month, day: 1, hour: 0, minute: 0, second: 0))!
+        
+        // 다음달 1일 0시
+        let endOfMonth = calendar.date(byAdding: DateComponents(month: 1), to: startOfMonth)!
+        
+        // 월 표시
+        let monthLabel = formatMonthLabel(startOfMonth)
         
         guard let userUuid = currentUserUuid ?? currentUser?.uuid else { return }
         
+        print("[HomeViewModel] 📅 월간 통계 조회: startedAt=\(startOfMonth), endedAt=\(endOfMonth)")
+        
         // Activities와 UserPoints를 병렬로 로드
         let activitiesPublisher = activityService.getActivities(
-            startDate: startOfMonth,
-            endDate: endOfMonth,
+            startedAt: startOfMonth,
+            endedAt: endOfMonth,
             userUuid: userUuid
         )
         
+        // 마지막 날 23:59:59
+        var lastDayComponents = calendar.dateComponents([.year, .month, .day], from: endOfMonth)
+        lastDayComponents.day! -= 1
+        lastDayComponents.hour = 23
+        lastDayComponents.minute = 59
+        lastDayComponents.second = 59
+        let lastDayOfMonth = calendar.date(from: lastDayComponents)!
+        
         let userPointsPublisher = pointService.getUserPoints(
-            startDate: startOfMonth,
-            endDate: endOfMonth,
+            startedAt: startOfMonth,
+            endedAt: lastDayOfMonth,
             userUuid: userUuid,
             pointType: .earned
         )
         
-        Publishers.Zip(activitiesPublisher, userPointsPublisher)
+        Publishers.Zip(
+            activitiesPublisher.catch { error -> AnyPublisher<ActivitiesListResponseDTO, Never> in
+                print("[HomeViewModel] ❌ Activities 로드 실패 (월간): \(error)")
+                let emptyActivities = ActivitiesListResponseDTO(activities: [], totalCount: 0)
+                return Just(emptyActivities).eraseToAnyPublisher()
+            },
+            userPointsPublisher.catch { error -> AnyPublisher<UserPointsListResponseDTO, Never> in
+                print("[HomeViewModel] ❌ UserPoints 로드 실패 (월간): \(error)")
+                let emptyUserPoints = UserPointsListResponseDTO(userPoints: [], totalCount: 0)
+                return Just(emptyUserPoints).eraseToAnyPublisher()
+            }
+        )
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.errorDescription
-                    }
+                    // Never이므로 failure 케이스는 없음
+                    print("[HomeViewModel] ✅ 월간 통계 로드 완료")
                 },
                 receiveValue: { [weak self] (activitiesResponse, userPointsResponse) in
                     guard let self = self else { return }
@@ -341,12 +414,15 @@ class HomeViewModel: ObservableObject {
                         .reduce(0) { $0 + $1.pointAmount }
                     
                     // Group by week
+                    // endOfMonth는 다음달 1일 0시이므로, 이번 달 마지막 날 23:59:59로 계산
+                    let lastDayOfMonth = calendar.date(byAdding: DateComponents(day: -1), to: endOfMonth)!
+                    
                     var weeklyData: [WeeklyData] = []
                     var currentWeekStart = startOfMonth
                     var weekNumber = 1
                     
-                    while currentWeekStart <= endOfMonth {
-                        let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: currentWeekStart)!, endOfMonth)
+                    while currentWeekStart <= lastDayOfMonth {
+                        let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: currentWeekStart)!, lastDayOfMonth)
                         let weekActivities = completedActivities.filter { activity in
                             activity.startTime >= currentWeekStart && activity.startTime <= weekEnd
                         }
@@ -365,7 +441,8 @@ class HomeViewModel: ObservableObject {
                         totalDistance: totalDistance,
                         runningCount: completedActivities.count,
                         earnedPoints: totalPoints,
-                        weeklyData: weeklyData
+                        weeklyData: weeklyData,
+                        monthLabel: monthLabel
                     )
                 }
             )
@@ -599,6 +676,8 @@ class HomeViewModel: ObservableObject {
                     self.loginRewardClaimed = true
                     // 사용자 정보 새로고침하여 포인트 업데이트
                     self.loadUser()
+                    // 오늘의 활동 포인트 및 일일 포인트 획득 새로고침
+                    self.loadDailyStats()
                 }
             )
             .store(in: &cancellables)
@@ -618,6 +697,39 @@ class HomeViewModel: ObservableObject {
         } else {
             return String(format: "%d:%02d", minutes, secs)
         }
+    }
+    
+    func formatDateLabel(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day, .weekday], from: date)
+        let dayNames = ["일", "월", "화", "수", "목", "금", "토"]
+        let dayName = dayNames[(components.weekday ?? 1) - 1]
+        return String(format: "%d년 %d월 %d일 %@요일", components.year ?? 2026, components.month ?? 1, components.day ?? 1, dayName)
+    }
+    
+    func formatWeekLabel(_ startOfWeek: Date) -> String {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month], from: startOfWeek)
+        let month = components.month ?? 1
+        
+        // 해당 주가 속한 월의 몇 번째 주인지 계산
+        var firstDayComponents = DateComponents(year: components.year, month: components.month, day: 1)
+        let firstDayOfMonth = calendar.date(from: firstDayComponents)!
+        let firstDayWeekday = calendar.component(.weekday, from: firstDayOfMonth)
+        let daysFromFirstMonday = firstDayWeekday == 1 ? 6 : firstDayWeekday - 2
+        let firstMondayOfMonth = calendar.date(byAdding: .day, value: -daysFromFirstMonday, to: firstDayOfMonth)!
+        
+        let daysDiff = calendar.dateComponents([.day], from: firstMondayOfMonth, to: startOfWeek).day ?? 0
+        let weekNumber = (daysDiff / 7) + 1
+        
+        return String(format: "%d월 %d주차", month, weekNumber)
+    }
+    
+    func formatMonthLabel(_ startOfMonth: Date) -> String {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.month], from: startOfMonth)
+        let month = components.month ?? 1
+        return String(format: "%d월", month)
     }
 }
 

@@ -260,9 +260,17 @@ struct DailyStatsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("오늘의 활동")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.gray900)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("오늘의 활동")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.gray900)
+                
+                if !stats.dateLabel.isEmpty {
+                    Text(stats.dateLabel)
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray600)
+                }
+            }
             
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                 StatCard(
@@ -371,9 +379,17 @@ struct WeeklyStatsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("주간 통계")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.gray900)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("주간 통계")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.gray900)
+                
+                if !stats.weekLabel.isEmpty {
+                    Text(stats.weekLabel)
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray600)
+                }
+            }
             
             VStack(alignment: .leading, spacing: 4) {
                 Text("총 거리")
@@ -427,9 +443,17 @@ struct MonthlyStatsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("월간 통계")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.gray900)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("월간 통계")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.gray900)
+                
+                if !stats.monthLabel.isEmpty {
+                    Text(stats.monthLabel)
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray600)
+                }
+            }
             
             HStack(spacing: 16) {
                 VStack {
