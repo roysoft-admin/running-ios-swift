@@ -94,6 +94,12 @@ struct MainTabView: View {
                     } else if let challengeId = activity.challengeId {
                         // challenge 정보가 없으면 challengeId만 저장
                         runViewModel.currentChallengeUuid = String(challengeId)
+                        runViewModel.currentChallenge = nil
+                    } else {
+                        // 일반 러닝이므로 챌린지 정보 초기화
+                        runViewModel.currentChallenge = nil
+                        runViewModel.currentChallengeUuid = nil
+                        print("[MainTabView] 🔵 일반 러닝 복원: 챌린지 정보 초기화")
                     }
                     
                     // 러닝 상태 복원

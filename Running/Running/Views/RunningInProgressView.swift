@@ -35,8 +35,8 @@ struct RunningInProgressView: View {
                 // Map Area (화면 절반, 라운드 영역까지 살짝 겹치도록)
                 ZStack {
                     // 지도를 지도 영역 내부에 배치 (지도 영역의 중앙에 위치가 표시되도록)
-                    ActivityMapView(routes: viewModel.routes, isInteractive: true)
-                        .ignoresSafeArea()
+                        ActivityMapView(routes: viewModel.routes, isInteractive: true)
+                            .ignoresSafeArea()
                     
                     VStack {
                         HStack {

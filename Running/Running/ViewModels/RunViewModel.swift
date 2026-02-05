@@ -109,6 +109,15 @@ class RunViewModel: NSObject, ObservableObject {
                             return NetworkError.unknown
                         }
                         .eraseToAnyPublisher()
+                } else if case .serverError(let code, _) = error, code == 400 {
+                    // 400 에러는 이미 활성 챌린지가 있거나 다른 문제일 수 있음
+                    print("[RunViewModel] ⚠️ 챌린지 생성 실패 (400), pending 챌린지 재조회 시도")
+                    // pending 챌린지를 다시 조회해보기
+                    return self.challengeService.getPendingChallenge(userUuid: userUuid)
+                        .map { (response: ChallengeResponseDTO) -> Challenge in
+                            return response.challenge
+                        }
+                        .eraseToAnyPublisher()
                 }
                 
                 // 다른 에러면 그대로 전달
@@ -149,13 +158,6 @@ class RunViewModel: NSObject, ObservableObject {
         errorMessage = nil
         startSuccess = nil
         
-        let startTime = Date()
-        self.startTime = startTime
-        self.activityStartTime = startTime
-        self.pauseStartTime = nil
-        self.totalPausedTime = 0
-        self.time = 0
-        
         guard let userUuid = currentUserUuid else {
             print("[RunViewModel] ❌ 사용자 UUID가 없습니다")
             errorMessage = "사용자 정보를 찾을 수 없습니다"
@@ -165,6 +167,56 @@ class RunViewModel: NSObject, ObservableObject {
         }
         
         print("[RunViewModel] ✅ 사용자 UUID: \(userUuid)")
+        
+        // 먼저 활성 activity 체크
+        print("[RunViewModel] 🔵 챌린지 러닝 시작 전 활성 activity 체크")
+        activityService.getActiveActivity(userUuid: userUuid)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        // 404 에러는 진행 중인 활동이 없다는 의미이므로 계속 진행
+                        if let networkError = error as? NetworkError,
+                           case .serverError(let code, _) = networkError,
+                           code == 404 {
+                            print("[RunViewModel] ✅ 활성 activity 없음, 새로 생성 진행")
+                            self?.createChallengeActivity(userUuid: userUuid, challengeUuid: challengeUuid)
+                        } else {
+                            print("[RunViewModel] ❌ 활성 activity 조회 실패: \(error)")
+                            self?.errorMessage = "활성 러닝 상태를 확인할 수 없습니다: \(error.errorDescription ?? "알 수 없는 오류")"
+                            self?.isLoading = false
+                            self?.startSuccess = false
+                        }
+                    }
+                },
+                receiveValue: { [weak self] response in
+                    guard let self = self else { return }
+                    print("[RunViewModel] ⚠️ 이미 활성 activity가 존재함: UUID=\(response.activity.uuid), 복원 진행")
+                    self.isLoading = false
+                    // 활성 activity가 있으면 복원
+                    self.currentActivityUuid = response.activity.uuid
+                    if let challenge = response.activity.challenge {
+                        self.currentChallenge = challenge
+                        self.currentChallengeUuid = challenge.uuid
+                    } else if let challengeId = response.activity.challengeId {
+                        self.currentChallengeUuid = String(challengeId)
+                    }
+                    self.restoreRunningState(startTime: response.activity.startTime)
+                    self.startSuccess = true
+                    self.showChallengeInfo = false
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    private func createChallengeActivity(userUuid: String, challengeUuid: String) {
+        let startTime = Date()
+        self.startTime = startTime
+        self.activityStartTime = startTime
+        self.pauseStartTime = nil
+        self.totalPausedTime = 0
+        self.time = 0
+        
         print("[RunViewModel] 📤 활동 생성 API 호출: challengeUuid=\(challengeUuid), startTime=\(startTime)")
         
         // Activity 생성 (챌린지 연결)
@@ -217,13 +269,6 @@ class RunViewModel: NSObject, ObservableObject {
         errorMessage = nil
         startSuccess = nil
         
-        let startTime = Date()
-        self.startTime = startTime
-        self.activityStartTime = startTime
-        self.pauseStartTime = nil
-        self.totalPausedTime = 0
-        self.time = 0
-        
         guard let userUuid = currentUserUuid else {
             print("[RunViewModel] ❌ 사용자 UUID가 없습니다")
             errorMessage = "사용자 정보를 찾을 수 없습니다"
@@ -233,39 +278,100 @@ class RunViewModel: NSObject, ObservableObject {
         }
         
         print("[RunViewModel] ✅ 사용자 UUID: \(userUuid)")
-        print("[RunViewModel] 📤 일반 러닝 활동 생성 API 호출")
-            activityService.createActivity(
-                userUuid: userUuid,
-                challengeUuid: nil,
-                startTime: startTime
-            )
+        
+        // 먼저 활성 activity 체크
+        print("[RunViewModel] 🔵 일반 러닝 시작 전 활성 activity 체크")
+        activityService.getActiveActivity(userUuid: userUuid)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
                     if case .failure(let error) = completion {
-                        print("[RunViewModel] ❌ 활동 시작 실패: \(error)")
-                        self?.errorMessage = error.errorDescription
-                        self?.startSuccess = false
-                        // 실패 시 타이머 중지 및 상태 리셋
-                        self?.timer?.invalidate()
-                        self?.routeTimer?.invalidate()
-                        self?.isRunning = false
-                        self?.resetRunningState()
-                    } else {
-                        print("[RunViewModel] ✅ 활동 시작 성공")
+                        // 404 에러는 진행 중인 활동이 없다는 의미이므로 계속 진행
+                        if let networkError = error as? NetworkError,
+                           case .serverError(let code, _) = networkError,
+                           code == 404 {
+                            print("[RunViewModel] ✅ 활성 activity 없음, 새로 생성 진행")
+                            self?.createNormalActivity(userUuid: userUuid)
+                        } else {
+                            print("[RunViewModel] ❌ 활성 activity 조회 실패: \(error)")
+                            self?.errorMessage = "활성 러닝 상태를 확인할 수 없습니다: \(error.errorDescription ?? "알 수 없는 오류")"
+                            self?.isLoading = false
+                            self?.startSuccess = false
+                        }
                     }
                 },
                 receiveValue: { [weak self] response in
                     guard let self = self else { return }
-                    print("[RunViewModel] ✅ 활동 생성 성공: UUID=\(response.activity.uuid)")
+                    print("[RunViewModel] ⚠️ 이미 활성 activity가 존재함: UUID=\(response.activity.uuid), 복원 진행")
+                    self.isLoading = false
+                    // 활성 activity가 있으면 복원
                     self.currentActivityUuid = response.activity.uuid
+                    if let challenge = response.activity.challenge {
+                        self.currentChallenge = challenge
+                        self.currentChallengeUuid = challenge.uuid
+                    } else if let challengeId = response.activity.challengeId {
+                        self.currentChallengeUuid = String(challengeId)
+                        self.currentChallenge = nil
+                    } else {
+                        // 일반 러닝이므로 챌린지 정보 초기화
+                        self.currentChallenge = nil
+                        self.currentChallengeUuid = nil
+                        print("[RunViewModel] 🔵 일반 러닝 복원: 챌린지 정보 초기화")
+                    }
+                    self.restoreRunningState(startTime: response.activity.startTime)
                     self.startSuccess = true
-                    // 성공 시 카운트다운 시작
-                    self.startCountdown()
+                    self.showChallengeInfo = false
                 }
             )
             .store(in: &cancellables)
+    }
+    
+    private func createNormalActivity(userUuid: String) {
+        let startTime = Date()
+        self.startTime = startTime
+        self.activityStartTime = startTime
+        self.pauseStartTime = nil
+        self.totalPausedTime = 0
+        self.time = 0
+        
+        // 일반 러닝이므로 챌린지 정보 초기화
+        self.currentChallenge = nil
+        self.currentChallengeUuid = nil
+        print("[RunViewModel] 🔵 일반 러닝 시작: 챌린지 정보 초기화")
+        
+        print("[RunViewModel] 📤 일반 러닝 활동 생성 API 호출")
+        activityService.createActivity(
+            userUuid: userUuid,
+            challengeUuid: nil,
+            startTime: startTime
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                self?.isLoading = false
+                if case .failure(let error) = completion {
+                    print("[RunViewModel] ❌ 활동 시작 실패: \(error)")
+                    self?.errorMessage = error.errorDescription
+                    self?.startSuccess = false
+                    // 실패 시 타이머 중지 및 상태 리셋
+                    self?.timer?.invalidate()
+                    self?.routeTimer?.invalidate()
+                    self?.isRunning = false
+                    self?.resetRunningState()
+                } else {
+                    print("[RunViewModel] ✅ 활동 시작 성공")
+                }
+            },
+            receiveValue: { [weak self] response in
+                guard let self = self else { return }
+                print("[RunViewModel] ✅ 활동 생성 성공: UUID=\(response.activity.uuid)")
+                self.currentActivityUuid = response.activity.uuid
+                self.startSuccess = true
+                // 성공 시 카운트다운 시작
+                self.startCountdown()
+            }
+        )
+        .store(in: &cancellables)
     }
     
     func pauseRunning() {
