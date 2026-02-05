@@ -42,6 +42,8 @@ class PointService {
     func getUserPoints(
         startDate: Date? = nil,
         endDate: Date? = nil,
+        startedAt: Date? = nil,
+        endedAt: Date? = nil,
         userUuid: String? = nil,
         pointUuid: String? = nil,
         pointType: PointType? = nil,
@@ -60,6 +62,20 @@ class PointService {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime]
             queryItems.append(URLQueryItem(name: "end_date", value: formatter.string(from: endDate)))
+        }
+        
+        if let startedAt = startedAt {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            formatter.timeZone = TimeZone(secondsFromGMT: 0) // UTC
+            queryItems.append(URLQueryItem(name: "started_at", value: formatter.string(from: startedAt)))
+        }
+        
+        if let endedAt = endedAt {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            formatter.timeZone = TimeZone(secondsFromGMT: 0) // UTC
+            queryItems.append(URLQueryItem(name: "ended_at", value: formatter.string(from: endedAt)))
         }
         
         if let userUuid = userUuid {

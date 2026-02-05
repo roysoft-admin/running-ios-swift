@@ -20,6 +20,8 @@ class ActivityService {
     func getActivities(
         startDate: Date? = nil,
         endDate: Date? = nil,
+        startedAt: Date? = nil,
+        endedAt: Date? = nil,
         userUuid: String? = nil
     ) -> AnyPublisher<ActivitiesListResponseDTO, NetworkError> {
         var queryItems: [URLQueryItem] = []
@@ -34,6 +36,24 @@ class ActivityService {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime]
             queryItems.append(URLQueryItem(name: "end_date", value: formatter.string(from: endDate)))
+        }
+        
+        if let startedAt = startedAt {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            formatter.timeZone = TimeZone(secondsFromGMT: 0) // UTC
+            let dateString = formatter.string(from: startedAt)
+            print("[ActivityService] 📅 startedAt: \(startedAt) -> \(dateString)")
+            queryItems.append(URLQueryItem(name: "started_at", value: dateString))
+        }
+        
+        if let endedAt = endedAt {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            formatter.timeZone = TimeZone(secondsFromGMT: 0) // UTC
+            let dateString = formatter.string(from: endedAt)
+            print("[ActivityService] 📅 endedAt: \(endedAt) -> \(dateString)")
+            queryItems.append(URLQueryItem(name: "ended_at", value: dateString))
         }
         
         if let userUuid = userUuid {

@@ -13,6 +13,7 @@ struct DailyStats {
     let calories: Int
     let points: Int
     let dailyPointEarnings: DailyPointEarnings
+    let dateLabel: String // 예: "2026년 1월 27일 월요일"
 }
 
 struct DailyPointEarnings {
@@ -27,6 +28,7 @@ struct WeeklyStats {
     let totalDistance: Double
     let runningCount: Int
     let dailyData: [DailyData]
+    let weekLabel: String // 예: "1월 4주차"
 }
 
 struct DailyData {
@@ -39,6 +41,7 @@ struct MonthlyStats {
     let runningCount: Int
     let earnedPoints: Int
     let weeklyData: [WeeklyData]
+    let monthLabel: String // 예: "1월"
 }
 
 struct WeeklyData {
